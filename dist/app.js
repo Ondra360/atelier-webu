@@ -52,17 +52,37 @@ function sampleProject() {
   return project;
 }
 
-let project;
-try { const stored = localStorage.getItem(STORAGE_KEY); project = stored ? JSON.parse(stored) : sampleProject(); if (!project.elements || !project.pageHeights) throw Error('invalid project'); }
-catch { project = sampleProject(); }
+function asSite(value) {
+  if (Array.isArray(value?.pages) && value.pages.length && value.pages.every(page => Array.isArray(page.elements) && page.pageHeights)) {
+    value.version = 2;
+    if (!value.pages.some(page => page.id === value.activePageId)) value.activePageId = value.pages[0].id;
+    return value;
+  }
+  if (!Array.isArray(value?.elements) || !value.pageHeights) throw Error('invalid project');
+  const page = { ...value, id:uid(), title:'Domovská stránka', filename:'index.html' };
+  return { version:2, activePageId:page.id, pages:[page] };
+}
+let site;
+try { const stored = localStorage.getItem(STORAGE_KEY); site = asSite(stored ? JSON.parse(stored) : sampleProject()); }
+catch { site = asSite(sampleProject()); }
+let project = site.pages.find(page => page.id === site.activePageId);
 let selected = null, device = 'desktop', propTab = 'design', preview = false, zoom = 1, history = [], future = [], activeFile = 'index.html', generated = {};
 let dirty = false;
 
-function remember() { history.push(JSON.stringify(project)); if (history.length > 60) history.shift(); future = []; dirty = true; $('#save-status').textContent = 'Neuložené změny'; }
+function remember() { history.push(JSON.stringify(site)); if (history.length > 60) history.shift(); future = []; dirty = true; $('#save-status').textContent = 'Neuložené změny'; }
 function changeHistory(direction) {
   const from = direction === 'undo' ? history : future, to = direction === 'undo' ? future : history;
   if (!from.length) return;
-  to.push(JSON.stringify(project)); project = JSON.parse(from.pop()); selected = null; dirty = true; $('#save-status').textContent = 'Neuložené změny'; renderAll();
+  to.push(JSON.stringify(site)); site = asSite(JSON.parse(from.pop())); project = site.pages.find(page=>page.id===site.activePageId); selected = null; dirty = true; $('#save-status').textContent = 'Neuložené změny'; renderAll();
+}
+function pageFilename(page) { return site.pages[0].id === page.id ? 'index.html' : page.filename; }
+function switchPage(id) { const page=site.pages.find(item=>item.id===id); if(!page)return; site.activePageId=id; project=page; selected=null; renderAll(); }
+function renderPages() {
+  $('#page-count').textContent=site.pages.length;
+  $('#current-page-title').textContent=project.title;
+  $('#page-breadcrumb').textContent=`STRÁNKA ${String(site.pages.indexOf(project)+1).padStart(2,'0')}`;
+  $('#current-page-badge').textContent=site.pages[0]===project?'ÚVODNÍ STRÁNKA':'STRÁNKA WEBU';
+  $('#pages-list').innerHTML=site.pages.map(page=>`<div class="page-entry ${page.id===project.id?'active':''}"><button class="page-select" data-page-select="${esc(page.id)}"><span class="page-entry-icon">▧</span><span><strong>${esc(page.title)}</strong><small>${esc(pageFilename(page))}</small></span></button>${page.id===project.id?`<div class="page-entry-details"><label>Název stránky<input data-page-title="${esc(page.id)}" value="${esc(page.title)}" maxlength="80"></label>${site.pages.length>1?`<button class="page-delete" data-page-delete="${esc(page.id)}">× &nbsp; Smazat stránku</button>`:''}</div>`:''}</div>`).join('');
 }
 function current() { return project.elements.find(item => item.id === selected); }
 function cssForElement(el, layout, z) {
@@ -77,9 +97,11 @@ function elementInner(el) {
   return esc(el.text).replace(/\n/g,'<br>');
 }
 function elementTag(el) { return el.type === 'button' ? 'button' : el.type === 'link' ? 'a' : el.type === 'heading' ? 'h1' : el.type === 'section' ? 'section' : 'div'; }
-function elementMarkup(el, z, editing) {
+function elementMarkup(el, z, editing, exporting = false) {
   const tag = elementTag(el), p = el.props, clickable = p.action?.type && p.action.type !== 'none';
-  const action = clickable ? ` data-action="${esc(JSON.stringify(p.action))}"` : '';
+  const targetPage = p.action?.type==='page' ? site.pages.find(page=>page.id===p.action.target) : null;
+  const actionData = exporting && p.action?.type==='page' ? {...p.action,value:targetPage ? pageFilename(targetPage) : ''} : p.action;
+  const action = clickable ? ` data-action="${esc(JSON.stringify(actionData))}"` : '';
   const attrs = tag === 'button' ? ' type="button"' : tag === 'a' ? ' href="#"' : '';
   return `<${tag} id="${esc(el.id)}" class="canvas-element${editing && selected === el.id ? ' selected' : ''}"${attrs}${action} style="${esc(cssForElement(el,el.layouts[device],z))}">${elementInner(el)}</${tag}>`;
 }
@@ -118,9 +140,10 @@ function renderProperties() {
   summary.innerHTML = `<div class="selected-icon">${typeIcons[el.type]}</div><div><strong>${esc(el.name)}</strong><small>${typeNames[el.type]} · ${DEVICE_LABELS[device]}</small></div><span>⌄</span>`;
   if (propTab === 'action') {
     const a = p.action || {type:'none',value:'',target:''};
-    const choices = [['none','Žádná akce'],['link','Otevřít odkaz'],['scroll','Posunout na prvek'],['toggle','Zobrazit / skrýt prvek'],['text','Změnit text prvku'],['alert','Zobrazit upozornění'],['submit','Odeslat formulář']];
+    const choices = [['none','Žádná akce'],['page','Otevřít stránku webu'],['link','Otevřít externí odkaz'],['scroll','Posunout na prvek'],['toggle','Zobrazit / skrýt prvek'],['text','Změnit text prvku'],['alert','Zobrazit upozornění'],['submit','Odeslat formulář']];
     const targets = project.elements.filter(item => item.id !== el.id && (a.type !== 'submit' || item.type === 'form') && (a.type !== 'text' || ['heading','text','button','link'].includes(item.type))).map(item => [item.id, item.name]);
     let html = field('Po kliknutí', 'type', a.type, {type:'select',scope:'action',options:choices});
+    if (a.type === 'page') html += field('Cílová stránka','target',a.target,{type:'select',scope:'action',options:[['','Vyberte stránku'],...site.pages.map(page=>[page.id,page.title])]});
     if (['scroll','toggle','text','submit'].includes(a.type)) html += field('Cílový prvek','target',a.target,{type:'select',scope:'action',options:[['','Vyberte prvek'],...targets]});
     if (['link','alert','text'].includes(a.type)) html += field(a.type === 'link' ? 'Adresa odkazu' : a.type === 'alert' ? 'Text upozornění' : 'Nový text','value',a.value,{scope:'action',type:'textarea'});
     html += '<p class="hint">Akce funguje v náhledu i v exportované stránce. Pro změnu cíle vyberte jiný prvek.</p>';
@@ -138,7 +161,7 @@ function renderProperties() {
   let appearance = field('Pozadí (barva nebo transparent)','bg',p.bg,{type:'color'}) + '<div class="property-grid">' + field('Rámeček','borderWidth',p.borderWidth,{type:'number'}) + field('Zaoblení','radius',p.radius,{type:'number'}) + field('Vnitřní mezera','padding',p.padding,{type:'number'}) + field('Vnější mezera','margin',p.margin,{type:'number'}) + field('Stín','shadow',p.shadow,{type:'number'}) + '</div>' + field('Barva rámečku','borderColor',p.borderColor,{type:'color'});
   box.innerHTML = section('Obsah',content) + section('Rozložení',geometry) + section('Typografie',typography) + section('Vzhled',appearance) + section('Pořadí a úpravy','<div class="property-actions"><button class="small-btn" data-operation="back">↓ Dozadu</button><button class="small-btn" data-operation="front">↑ Dopředu</button></div><div class="property-actions" style="margin-top:7px"><button class="small-btn" data-operation="duplicate">⧉ Kopírovat</button><button class="small-btn" data-operation="delete">× Smazat</button></div>');
 }
-function renderAll() { renderCanvas(); renderProperties(); }
+function renderAll() { renderPages(); renderCanvas(); renderProperties(); }
 
 function addElement(type, x, y) {
   remember(); const scale = WIDTHS[device] / 1200;
@@ -165,6 +188,11 @@ function mountActions(root) {
     let action; try { action=JSON.parse(source.dataset.action); } catch { return; }
     event.preventDefault();
     const target = action.target ? root.querySelector('#' + CSS.escape(action.target)) : null;
+    if (action.type==='page') {
+      const navigation = new CustomEvent('atelier:navigate',{detail:action.target,cancelable:true});
+      root.dispatchEvent(navigation);
+      if (!navigation.defaultPrevented && action.value) window.location.href=action.value;
+    }
     if (action.type==='link' && action.value) {
       const url=action.value.trim();
       try { const parsed=new URL(url,document.baseURI); if (!['http:','https:','mailto:','tel:','file:'].includes(parsed.protocol)) throw Error('unsupported protocol'); window.open(url, '_blank', 'noopener'); }
@@ -183,30 +211,59 @@ function mountActions(root) {
   });
 }
 mountActions($('#page'));
+$('#page').addEventListener('atelier:navigate',event=>{event.preventDefault();if(site.pages.some(page=>page.id===event.detail)) switchPage(event.detail);else toast('Nejdříve vyberte cílovou stránku.');});
 
 function exportedCSS() {
   const originalDevice=device;
-  const rules = key => { device=key; return project.elements.map((el,index)=>`#${el.id}{${cssForElement(el,el.layouts[key],index+1)}}`).join('\n'); };
+  const rules = key => { device=key; return site.pages.map(page=>`body[data-page="${page.id}"] .page{height:${page.pageHeights[key]}px}\n`+page.elements.map((el,index)=>`body[data-page="${page.id}"] #${el.id}{${cssForElement(el,el.layouts[key],index+1)}}`).join('\n')).join('\n'); };
   const base=rules('desktop'), tablet=rules('tablet'), mobile=rules('mobile'); device=originalDevice;
-  return `/* Vygenerováno v Ateliéru. Rozměry odpovídají návrhu pro jednotlivá zařízení. */\n*{box-sizing:border-box}\nhtml{scroll-behavior:smooth}\nbody{margin:0}\n.page{position:relative;width:100%;height:${project.pageHeights.desktop}px;overflow:hidden;background:#fff}\n.canvas-element{position:absolute;box-sizing:border-box;overflow:hidden;margin:0}\n.canvas-element[hidden]{display:none!important}\n.canvas-element img{display:block;width:100%;height:100%;object-fit:cover}\n.canvas-form{display:flex;flex-direction:column;gap:10px;font:inherit;height:100%}\n.canvas-form label{font-size:.8em;font-weight:600;display:flex;flex-direction:column;gap:5px}\n.canvas-form input{font:inherit;height:38px;border:1px solid #dcded8;border-radius:4px;padding:0 10px;background:#fff}\n.canvas-form button{border:0;background:#283b30;color:#fff;border-radius:4px;padding:11px;cursor:pointer}\n${base}\n@media(max-width:1024px){.page{height:${project.pageHeights.tablet}px}\n${tablet}\n}\n@media(max-width:600px){.page{height:${project.pageHeights.mobile}px}\n${mobile}\n}\n`;
+  return `/* Vygenerováno v Ateliéru. Rozměry odpovídají návrhu pro jednotlivá zařízení. */\n*{box-sizing:border-box}\nhtml{scroll-behavior:smooth}\nbody{margin:0}\n.page{position:relative;width:100%;overflow:hidden;background:#fff}\n.canvas-element{position:absolute;box-sizing:border-box;overflow:hidden;margin:0}\n.canvas-element[hidden]{display:none!important}\n.canvas-element img{display:block;width:100%;height:100%;object-fit:cover}\n.canvas-form{display:flex;flex-direction:column;gap:10px;font:inherit;height:100%}\n.canvas-form label{font-size:.8em;font-weight:600;display:flex;flex-direction:column;gap:5px}\n.canvas-form input{font:inherit;height:38px;border:1px solid #dcded8;border-radius:4px;padding:0 10px;background:#fff}\n.canvas-form button{border:0;background:#283b30;color:#fff;border-radius:4px;padding:11px;cursor:pointer}\n${base}\n@media(max-width:1024px){\n${tablet}\n}\n@media(max-width:600px){\n${mobile}\n}\n`;
 }
 function exportFiles() {
   const originalDevice=device; device='desktop';
-  const elements = project.elements.map((el,index) => {
-    const markup=elementMarkup(el,index+1,false);
-    return markup.replace(/ style="[^"]*"(?=>)/,'');
-  }).join('\n    '); device=originalDevice;
-  return {
-    'index.html':`<!doctype html>\n<html lang="cs">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>Moje stránka</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <main class="page">\n    ${elements}\n  </main>\n  <script src="script.js"><\/script>\n</body>\n</html>\n`,
-    'style.css': exportedCSS(),
-    'script.js': `/* Interakce stránky vygenerované v Ateliéru. */\n(${mountActions.toString()})(document);\n`
-  };
+  const files={};
+  site.pages.forEach(page=>{
+    const elements=page.elements.map((el,index)=>elementMarkup(el,index+1,false,true).replace(/ style="[^"]*"(?=>)/,'')).join('\n    ');
+    files[pageFilename(page)]=`<!doctype html>\n<html lang="cs">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>${esc(page.title)}</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body data-page="${esc(page.id)}">\n  <main class="page">\n    ${elements}\n  </main>\n  <script src="script.js"><\/script>\n</body>\n</html>\n`;
+  });
+  device=originalDevice;
+  files['style.css']=exportedCSS();
+  files['script.js']=`/* Interakce stránek vygenerovaných v Ateliéru. */\n(${mountActions.toString()})(document);\n`;
+  return files;
 }
-function updateExport() { generated=exportFiles(); $('#export-code').textContent=generated[activeFile]; $$('.code-tabs button').forEach(b=>b.classList.toggle('active',b.dataset.file===activeFile)); }
-function download(name, content) { const url=URL.createObjectURL(new Blob([content],{type:'text/plain;charset=utf-8'})); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
+function updateExport() { generated=exportFiles(); if(!generated[activeFile])activeFile='index.html'; $('#code-tabs').innerHTML=Object.keys(generated).map(name=>`<button data-file="${esc(name)}" class="${name===activeFile?'active':''}">${esc(name)}</button>`).join(''); $('#export-code').textContent=generated[activeFile]; }
+function download(name, content) { const blob=content instanceof Blob ? content : new Blob([content],{type:'text/plain;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
+function zipFiles(files) {
+  const encoder=new TextEncoder(), chunks=[], central=[]; let offset=0, directorySize=0;
+  const crc32=bytes=>{let crc=0xffffffff;for(const byte of bytes){crc^=byte;for(let i=0;i<8;i++)crc=(crc>>>1)^(0xedb88320 & -(crc&1));}return (crc^0xffffffff)>>>0;};
+  for(const [name,content] of Object.entries(files)) {
+    const filename=encoder.encode(name), data=encoder.encode(content), checksum=crc32(data);
+    const local=new Uint8Array(30+filename.length), l=new DataView(local.buffer);
+    l.setUint32(0,0x04034b50,true);l.setUint16(4,20,true);l.setUint16(6,0x0800,true);l.setUint16(12,33,true);l.setUint32(14,checksum,true);l.setUint32(18,data.length,true);l.setUint32(22,data.length,true);l.setUint16(26,filename.length,true);local.set(filename,30);
+    const entry=new Uint8Array(46+filename.length), c=new DataView(entry.buffer);
+    c.setUint32(0,0x02014b50,true);c.setUint16(4,20,true);c.setUint16(6,20,true);c.setUint16(8,0x0800,true);c.setUint16(14,33,true);c.setUint32(16,checksum,true);c.setUint32(20,data.length,true);c.setUint32(24,data.length,true);c.setUint16(28,filename.length,true);c.setUint32(42,offset,true);entry.set(filename,46);
+    chunks.push(local,data);central.push(entry);offset+=local.length+data.length;directorySize+=entry.length;
+  }
+  const end=new Uint8Array(22), e=new DataView(end.buffer); e.setUint32(0,0x06054b50,true);e.setUint16(8,central.length,true);e.setUint16(10,central.length,true);e.setUint32(12,directorySize,true);e.setUint32(16,offset,true);
+  return new Blob([...chunks,...central,end],{type:'application/zip'});
+}
 
 // Editor controls
-$$('[data-left-tab]').forEach(button=>button.addEventListener('click',()=>{ $$('[data-left-tab]').forEach(b=>b.classList.toggle('active',b===button)); $('#elements-pane').classList.toggle('hidden',button.dataset.leftTab!=='elements'); $('#layers-pane').classList.toggle('hidden',button.dataset.leftTab!=='layers'); }));
+$$('[data-left-tab]').forEach(button=>button.addEventListener('click',()=>{ $$('[data-left-tab]').forEach(b=>b.classList.toggle('active',b===button)); ['elements','layers','pages'].forEach(name=>$('#'+name+'-pane').classList.toggle('hidden',button.dataset.leftTab!==name)); }));
+$('#add-page').addEventListener('click',()=>{
+  remember(); let number=site.pages.length+1; while(site.pages.some(page=>page.filename===`stranka-${number}.html`))number++;
+  const page={id:uid(),title:`Nová stránka ${number}`,filename:`stranka-${number}.html`,pageHeights:{desktop:1000,tablet:1100,mobile:1330},elements:[]};site.pages.push(page);switchPage(page.id);toast('Nová stránka je připravená.');
+});
+$('#pages-list').addEventListener('click',event=>{
+  const select=event.target.closest('[data-page-select]'); if(select){switchPage(select.dataset.pageSelect);return;}
+  const remove=event.target.closest('[data-page-delete]'); if(!remove || site.pages.length<2)return;
+  const page=site.pages.find(item=>item.id===remove.dataset.pageDelete);if(!page || !confirm(`Smazat stránku „${page.title}“ a její prvky?`))return;
+  remember();site.pages=site.pages.filter(item=>item.id!==page.id);site.pages.forEach(item=>item.elements.forEach(el=>{if(el.props.action?.type==='page'&&el.props.action.target===page.id)el.props.action.target='';}));switchPage(site.pages[0].id);toast('Stránka byla smazána.');
+});
+$('#pages-list').addEventListener('change',event=>{const id=event.target.dataset.pageTitle;if(!id)return;const page=site.pages.find(item=>item.id===id);if(!page)return;const title=event.target.value.trim()||'Stránka';if(title!==page.title){remember();page.title=title;}renderAll();});
+function applyTheme(dark) {document.body.classList.toggle('dark',dark);$('#theme-btn').setAttribute('aria-pressed',String(dark));$('#theme-btn').title=dark?'Přepnout světlý režim':'Přepnout tmavý režim';$('#theme-btn').setAttribute('aria-label',$('#theme-btn').title);$('#theme-btn').innerHTML=dark?'<span>☼</span> <b>Světlý režim</b>':'<span>☾</span> <b>Tmavý režim</b>';}
+try { applyTheme(localStorage.getItem('atelier-theme')==='dark'); } catch { applyTheme(false); }
+$('#theme-btn').addEventListener('click',()=>{const dark=!document.body.classList.contains('dark');applyTheme(dark);try{localStorage.setItem('atelier-theme',dark?'dark':'light');}catch{toast('Nastavení vzhledu nelze v tomto prohlížeči uložit.');}});
 $$('[data-add]').forEach(button=>{ button.addEventListener('click',()=>addElement(button.dataset.add)); button.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',button.dataset.add)); });
 $('#page').addEventListener('dragover',event=>{ if (!preview) event.preventDefault(); });
 $('#page').addEventListener('drop',event=>{ event.preventDefault(); const type=event.dataTransfer.getData('text/plain'); if (!typeNames[type] || preview) return; const rect=$('#page').getBoundingClientRect(); addElement(type,(event.clientX-rect.left)/zoom,(event.clientY-rect.top)/zoom); });
@@ -215,13 +272,14 @@ $$('[data-prop-tab]').forEach(button=>button.addEventListener('click',()=>{propT
 $$('[data-device]').forEach(button=>button.addEventListener('click',()=>{device=button.dataset.device;$$('[data-device]').forEach(b=>b.classList.toggle('active',b===button));renderAll();}));
 $('#fit-btn').addEventListener('click',fitCanvas); window.addEventListener('resize',fitCanvas);
 $('#undo-btn').addEventListener('click',()=>changeHistory('undo')); $('#redo-btn').addEventListener('click',()=>changeHistory('redo'));
-$('#save-btn').addEventListener('click',()=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));dirty=false;$('#save-status').textContent='Uloženo v prohlížeči';toast('Projekt je uložen v tomto prohlížeči.');}catch{toast('Projekt se nepodařilo uložit. Zkontrolujte dostupné místo v prohlížeči.');}});
+$('#save-btn').addEventListener('click',()=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(site));dirty=false;$('#save-status').textContent='Uloženo v prohlížeči';toast('Všechny stránky jsou uložené v tomto prohlížeči.');}catch{toast('Projekt se nepodařilo uložit. Zkontrolujte dostupné místo v prohlížeči.');}});
 $('#preview-btn').addEventListener('click',()=>{preview=!preview;document.body.classList.toggle('previewing',preview);$('#preview-btn').innerHTML=preview?'<span>✎</span> Zpět do editoru':'<span>▷</span> Náhled';$('.workspace-note span:last-child').textContent=preview?'Režim náhledu':'Režim úprav';renderAll();});
 $('#export-btn').addEventListener('click',()=>{activeFile='index.html';updateExport();$('#export-modal').classList.remove('hidden');});
 $$('[data-close]').forEach(b=>b.addEventListener('click',()=>$('#'+b.dataset.close).classList.add('hidden')));
 $('#export-modal').addEventListener('click',e=>{if(e.target.id==='export-modal') e.currentTarget.classList.add('hidden');});
-$$('[data-file]').forEach(b=>b.addEventListener('click',()=>{activeFile=b.dataset.file;updateExport();}));
+$('#code-tabs').addEventListener('click',event=>{const b=event.target.closest('[data-file]');if(b){activeFile=b.dataset.file;updateExport();}});
 $('#download-code').addEventListener('click',()=>download(activeFile,generated[activeFile]));
+$('#download-zip').addEventListener('click',()=>{download('muj-web.zip',zipFiles(generated));toast('ZIP obsahuje všechny stránky, styly a skript.');});
 $('#copy-code').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(generated[activeFile]);toast('Obsah souboru zkopírován.');}catch{const area=document.createElement('textarea');area.value=generated[activeFile];document.body.appendChild(area);area.select();document.execCommand('copy');area.remove();toast('Obsah souboru zkopírován.');}});
 $('#properties').addEventListener('change',event=>{
   const input=event.target, el=current();
