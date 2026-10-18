@@ -4,6 +4,7 @@ const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const WIDTHS = { desktop: 1200, tablet: 768, mobile: 375 };
 const DEVICE_LABELS = { desktop: 'počítač', tablet: 'tablet', mobile: 'mobil' };
 const STORAGE_KEY = 'atelier-web-project-v1';
+const ACCOUNT_KEY = 'atelier-web-project-account';
 const clone = value => JSON.parse(JSON.stringify(value));
 const uid = () => 'el-' + Math.random().toString(36).slice(2, 10);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
@@ -89,12 +90,13 @@ function asSite(value) {
   const page = { ...value, id:uid(), title:'Domovská stránka', filename:'index.html' };
   return { version:2, activePageId:page.id, pages:[page] };
 }
-let site;
-try { const stored = localStorage.getItem(STORAGE_KEY); site = asSite(stored ? JSON.parse(stored) : sampleProject()); }
+let site, hadLocalProject = false;
+try { const stored = localStorage.getItem(STORAGE_KEY); hadLocalProject=!!stored; site = asSite(stored ? JSON.parse(stored) : sampleProject()); }
 catch { site = asSite(sampleProject()); }
 let project = site.pages.find(page => page.id === site.activePageId);
 let selected = null, device = 'desktop', propTab = 'design', preview = false, zoom = 1, history = [], future = [], activeFile = 'index.html', generated = {};
 let dirty = false;
+let cloud = { status:'loading', account:null, revision:null, pending:null };
 
 function remember() { history.push(JSON.stringify(site)); if (history.length > 60) history.shift(); future = []; dirty = true; $('#save-status').textContent = 'Neuložené změny'; }
 function changeHistory(direction) {
@@ -311,6 +313,76 @@ function zipFiles(files) {
   return new Blob([...chunks,...central,end],{type:'application/zip'});
 }
 
+function accountDisplay() {
+  const logged=cloud.status==='ready' && cloud.account;
+  $('#account-title').textContent=logged ? cloud.account.displayName : cloud.status==='loading' ? 'Kontroluji účet…' : cloud.status==='signed-out' ? 'Nejste přihlášeni' : 'Účet není dostupný';
+  $('#account-description').textContent=logged ? `Přihlášeno jako ${cloud.account.email}. Uložení propojí všechny stránky s tímto účtem.` : cloud.status==='signed-out' ? 'Přihlaste se pro online ukládání stránek.' : cloud.status==='loading' ? 'Načítám online úložiště.' : 'Projekt můžete zatím uložit do tohoto prohlížeče. Online připojení můžete zkusit znovu.';
+  $('#sign-in').classList.toggle('hidden',cloud.status!=='signed-out');
+  $('#sign-out').classList.toggle('hidden',!logged);
+  $('#cloud-load').classList.toggle('hidden',cloud.status==='loading'||cloud.status==='signed-out');
+  $('#cloud-load').textContent=logged?'Načíst projekt z účtu':'Zkusit připojení znovu';
+}
+async function cloudRequest(options = {}) {
+  const controller=new AbortController(), timer=setTimeout(()=>controller.abort(),12000);
+  try {
+    const response=await fetch('/api/project',{cache:'no-store',credentials:'same-origin',...options,signal:controller.signal});
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok) {const error=new Error(body.error||'Online úložiště není dostupné.');error.status=response.status;throw error;}
+    return body;
+  } finally {clearTimeout(timer);}
+}
+function loadOnlineProject(remote, preserveLocal) {
+  if (preserveLocal) {
+    try { localStorage.setItem(`${STORAGE_KEY}-backup-${Date.now()}`,JSON.stringify(site)); }
+    catch {toast('Místní zálohu se nepodařilo vytvořit. Uvolněte místo v prohlížeči a zkuste to znovu.');return false;}
+  }
+  site=asSite(clone(remote));project=site.pages.find(page=>page.id===site.activePageId);selected=null;history=[];future=[];dirty=false;
+  try {localStorage.setItem(STORAGE_KEY,JSON.stringify(site));localStorage.setItem(ACCOUNT_KEY,cloud.account.key);hadLocalProject=true;} catch {toast('Projekt je načten z účtu, ale místní kopii se nepodařilo uložit.');}
+  $('#save-status').textContent='Načteno z účtu';renderAll();return true;
+}
+async function refreshCloud() {
+  if(location.protocol==='file:'){cloud.status='offline';accountDisplay();return;}
+  cloud.status='loading';accountDisplay();$('#save-btn').disabled=true;
+  try {
+    const result=await cloudRequest();
+    cloud={status:'ready',account:result.account,revision:result.revision,pending:null};
+    if(result.project) {
+      const remote=asSite(clone(result.project));
+      if(JSON.stringify(remote)!==JSON.stringify(site)) {
+        if(hadLocalProject||dirty) {cloud.pending=remote;$('#cloud-conflict').classList.remove('hidden');}
+        else loadOnlineProject(remote,false);
+      } else {$('#save-status').textContent='Uloženo na účtu';try{localStorage.setItem(ACCOUNT_KEY,cloud.account.key);}catch{}}
+    } else if(hadLocalProject||dirty) $('#save-status').textContent='Místní projekt · připraven k uložení na účet';
+    else $('#save-status').textContent='Připraveno k uložení na účet';
+  } catch(error) {
+    cloud.status=error.status===401?'signed-out':'offline';cloud.account=null;cloud.revision=null;
+    if(hadLocalProject) $('#save-status').textContent='Uloženo jen v prohlížeči';
+    if(error.status!==401 && location.protocol!=='file:') toast('Online úložiště není dostupné. Místní projekt zůstává v prohlížeči.');
+  } finally {$('#save-btn').disabled=false;accountDisplay();}
+}
+async function saveProject() {
+  if(cloud.pending){toast('Nejdříve vyberte, kterou verzi projektu chcete používat.');return;}
+  const snapshot=JSON.stringify(site);let localSaved=false;
+  try {localStorage.setItem(STORAGE_KEY,snapshot);hadLocalProject=true;localSaved=true;}catch{}
+  if(cloud.status!=='ready') {
+    dirty=!localSaved;$('#save-status').textContent=localSaved?'Uloženo jen v prohlížeči':'Uložení se nepodařilo';
+    toast(localSaved?'Projekt je uložen jen v tomto prohlížeči. Pro uložení na účet se připojte.':'Projekt se nepodařilo uložit. Zkontrolujte dostupné místo.');return;
+  }
+  $('#save-btn').disabled=true;$('#save-status').textContent='Ukládám na účet…';
+  try {
+    const result=await cloudRequest({method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({project:JSON.parse(snapshot),revision:cloud.revision})});
+    cloud.revision=result.revision;
+    try{localStorage.setItem(ACCOUNT_KEY,cloud.account.key);}catch{}
+    dirty=JSON.stringify(site)!==snapshot;
+    $('#save-status').textContent=dirty?'Uloženo na účtu · další změny neuloženy':'Uloženo na účtu';
+    toast(dirty?'Projekt je na účtu, ale od té doby máte další neuložené změny.':'Všechny stránky jsou uložené na vašem účtu.');
+  } catch(error) {
+    dirty=true;$('#save-status').textContent=localSaved?'Uloženo jen v prohlížeči':'Online uložení se nezdařilo';
+    toast(localSaved ? (error.message || 'Uložení na účet se nezdařilo.') : 'Projekt se nepodařilo uložit na účet ani do prohlížeče. Zkuste to znovu.');
+    if(error.status===409) await refreshCloud();
+  } finally {$('#save-btn').disabled=false;}
+}
+
 // Editor controls
 $$('[data-left-tab]').forEach(button=>button.addEventListener('click',()=>{ $$('[data-left-tab]').forEach(b=>b.classList.toggle('active',b===button)); ['elements','layers','pages'].forEach(name=>$('#'+name+'-pane').classList.toggle('hidden',button.dataset.leftTab!==name)); }));
 $('#add-page').addEventListener('click',()=>{
@@ -335,7 +407,11 @@ $$('[data-prop-tab]').forEach(button=>button.addEventListener('click',()=>{propT
 $$('[data-device]').forEach(button=>button.addEventListener('click',()=>{device=button.dataset.device;$$('[data-device]').forEach(b=>b.classList.toggle('active',b===button));renderAll();}));
 $('#fit-btn').addEventListener('click',fitCanvas); window.addEventListener('resize',fitCanvas);
 $('#undo-btn').addEventListener('click',()=>changeHistory('undo')); $('#redo-btn').addEventListener('click',()=>changeHistory('redo'));
-$('#save-btn').addEventListener('click',()=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(site));dirty=false;$('#save-status').textContent='Uloženo v prohlížeči';toast('Všechny stránky jsou uložené v tomto prohlížeči.');}catch{toast('Projekt se nepodařilo uložit. Zkontrolujte dostupné místo v prohlížeči.');}});
+$('#save-btn').addEventListener('click',saveProject);
+$('#account-btn').addEventListener('click',()=>{const panel=$('#account-panel');panel.classList.toggle('hidden');$('#account-btn').setAttribute('aria-expanded',String(!panel.classList.contains('hidden')));});
+$('#cloud-load').addEventListener('click',()=>{ $('#account-panel').classList.add('hidden');$('#account-btn').setAttribute('aria-expanded','false');refreshCloud(); });
+$('#cloud-use-local').addEventListener('click',()=>{cloud.pending=null;$('#cloud-conflict').classList.add('hidden');dirty=true;$('#save-status').textContent='Místní verze · připravena k uložení na účet';toast('Používáte místní verzi. Na účet ji uložíte tlačítkem Uložit projekt.');});
+$('#cloud-use-online').addEventListener('click',()=>{if(cloud.pending && loadOnlineProject(cloud.pending,true)){cloud.pending=null;$('#cloud-conflict').classList.add('hidden');toast('Projekt byl načten z účtu. Místní verze zůstala jako záloha v prohlížeči.');}});
 $('#preview-btn').addEventListener('click',()=>{preview=!preview;document.body.classList.toggle('previewing',preview);$('#preview-btn').innerHTML=preview?'<span>✎</span> Zpět do editoru':'<span>▷</span> Náhled';$('.workspace-note span:last-child').textContent=preview?'Režim náhledu':'Režim úprav';renderAll();});
 $('#export-btn').addEventListener('click',()=>{activeFile='index.html';updateExport();$('#export-modal').classList.remove('hidden');});
 $$('[data-close]').forEach(b=>b.addEventListener('click',()=>$('#'+b.dataset.close).classList.add('hidden')));
@@ -408,3 +484,4 @@ document.addEventListener('keydown',event=>{
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
 renderAll();
 try { if(localStorage.getItem(STORAGE_KEY)) $('#save-status').textContent='Uloženo v prohlížeči'; } catch { /* Storage may be disabled by the browser. */ }
+accountDisplay();refreshCloud();
