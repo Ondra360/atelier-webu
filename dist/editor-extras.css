@@ -2,3 +2,33 @@
 .sidebar-tabs{gap:14px}.sidebar-tabs button{font-size:10px}.theme-toggle b{font-size:11px}.page-entry{border:1px solid #edf0e9;border-radius:8px;margin-bottom:8px;overflow:hidden}.page-entry.active{border-color:#c9d7c7;background:#f5f8f2}.page-select{display:flex;gap:9px;align-items:center;width:100%;border:0;background:transparent;text-align:left;padding:11px;color:#3c4a3e}.page-select .page-entry-icon{width:28px;height:28px;border-radius:6px;display:grid;place-items:center;background:#edf2e9;color:#6f8372;font-size:16px}.page-select strong,.page-select small{display:block}.page-select strong{font-size:11px}.page-select small{font-size:9px;color:#9ba69a;margin-top:3px}.page-entry-details{padding:0 11px 11px}.page-entry-details label{font-size:10px;color:#8e9a8d;font-weight:600}.page-entry-details input{width:100%;margin:6px 0 8px;padding:8px;border:1px solid #e4eae1;border-radius:5px;background:#fff;color:#36483a;font:inherit;font-size:11px}.page-entry-details .page-delete{border:0;background:transparent;color:#b47b68;font-size:10px;padding:4px 0}.add-page{width:100%;margin-top:5px;padding:11px;border:1px dashed #cbd8c9;border-radius:7px;background:#fafcf8;color:#4a6651;font-weight:700;font-size:11px}.add-page:hover{background:#edf4eb}.code-tabs{overflow:auto;flex-shrink:0}.code-tabs button{white-space:nowrap}.modal-footer>div{flex-wrap:wrap;justify-content:flex-end}
 body.dark{background:#171e1a;color:#e6ece3;color-scheme:dark}.dark .topbar,.dark .left-panel,.dark .right-panel,.dark .canvas-toolbar,.dark .modal-card{background:#202a24;border-color:#354139;color:#e4ebe3}.dark .workspace{background:#19221c}.dark .canvas-scroll{background:#131b16;border-color:#344239}.dark .element-card,.dark .btn-light,.dark .page-entry,.dark .layer,.dark .field input:not([type=color]):not([type=checkbox]),.dark .field textarea,.dark .field select,.dark .input-wrap,.dark .small-btn,.dark .page-entry-details input{background:#26332a;border-color:#3b4a3f;color:#dce7dc}.dark .element-card:hover,.dark .layer:hover,.dark .layer.active,.dark .page-entry.active{background:#304136;border-color:#536c58}.dark .element-card strong,.dark .selected-summary strong,.dark .project-title strong,.dark .sidebar-footer strong,.dark .sidebar-tabs button.active,.dark .property-tabs button.active,.dark .page-select,.dark .toolbar-label strong{color:#e0e9df}.dark .element-card small,.dark .panel-intro,.dark .eyebrow,.dark .hint,.dark .field>span,.dark .page-select small,.dark .workspace-top p{color:#91a295}.dark .sidebar-tabs,.dark .property-tabs,.dark .sidebar-footer,.dark .right-footer,.dark .property-section,.dark .selected-summary,.dark .project-title{border-color:#36453a}.dark .selected-icon,.dark .project-icon,.dark .mini-page,.dark .devices,.dark .sidebar-tip,.dark .close-modal,.dark .page-select .page-entry-icon{background:#303e34;color:#b9cbbb;border-color:#405347}.dark .device{color:#9caf9e}.dark .device.active{background:#475d4c;color:#fff}.dark .page-badge,.dark .add-page{background:#2c3c30;color:#bed0bc;border-color:#526c55}.dark .btn-primary{background:#c2dbc3;color:#1d3323}.dark .btn-primary:hover{background:#d0e9d0}.dark .workspace-bottom,.dark .toolbar-right,.dark .right-footer{color:#9cad9f}.dark .notice{background:#3e3428;border-color:#675139;color:#f1c89a}.dark .modal pre{background:#111a14}.dark .code-tabs button{color:#a3b6a5}.dark .code-tabs button.active{color:#e4eee2}.dark .page-entry-details .page-delete{color:#e4a38c}.dark .canvas-element{color-scheme:light}
 @media(max-width:1050px){.theme-toggle b{display:none}.sidebar-tabs{gap:8px}.sidebar-tabs button{font-size:9px}}
+
+/* Neutral black editor chrome; the user's page retains its own colors. */
+body.dark{background:#080808;color:#ededed}
+.dark .topbar,.dark .left-panel,.dark .right-panel,.dark .canvas-toolbar,.dark .modal-card{background:#111;border-color:#303030;color:#ededed}
+.dark .workspace{background:#080808}
+.dark .canvas-scroll,.dark.previewing .canvas-scroll{background:#050505;border-color:#303030}
+.dark .element-card,.dark .btn-light,.dark .page-entry,.dark .layer,.dark .field input:not([type=color]):not([type=checkbox]),.dark .field textarea,.dark .field select,.dark .input-wrap,.dark .small-btn,.dark .page-entry-details input{background:#1c1c1c;border-color:#383838;color:#e5e5e5}
+.dark .element-card:hover,.dark .layer:hover,.dark .layer.active,.dark .page-entry.active{background:#292929;border-color:#555}
+.dark .element-card strong,.dark .selected-summary strong,.dark .project-title strong,.dark .sidebar-footer strong,.dark .sidebar-tabs button.active,.dark .property-tabs button.active,.dark .page-select,.dark .toolbar-label strong{color:#eee}
+.dark .element-card small,.dark .panel-intro,.dark .eyebrow,.dark .hint,.dark .field>span,.dark .page-select small,.dark .workspace-top p,.dark .workspace-bottom,.dark .toolbar-right,.dark .right-footer,.dark .workspace-note{color:#aaa}
+.dark .sidebar-tabs,.dark .property-tabs,.dark .sidebar-footer,.dark .right-footer,.dark .property-section,.dark .selected-summary,.dark .project-title{border-color:#333}
+.dark .selected-icon,.dark .project-icon,.dark .mini-page,.dark .devices,.dark .sidebar-tip,.dark .close-modal,.dark .page-select .page-entry-icon{background:#282828;color:#ccc;border-color:#444}
+.dark .device,.dark .element-icon,.dark .layer span:first-child,.dark .toolbar-right button{color:#b5b5b5}
+.dark .device.active{background:#4a4a4a;color:#fff}
+.dark .page-badge,.dark .add-page{background:#292929;color:#ddd;border-color:#555}
+.dark .add-page:hover,.dark .btn-light:hover{background:#353535}
+.dark .btn-primary{background:#efefef;color:#111;box-shadow:none}
+.dark .btn-primary:hover{background:#fff}
+.dark .notice{background:#262626;border-color:#454545;color:#ddd}
+.dark .modal pre{background:#080808;color:#ddd}
+.dark .code-tabs button{color:#aaa}.dark .code-tabs button.active{color:#fff}
+.dark .status-dot{background:#bbb}.dark .divider{background:#383838}
+.dark .brand-mark{background:#303030}.dark .brand-mark span{background:#ddd}
+.dark .brand strong span,.dark .heading-symbol,.dark .right-footer span{color:#ddd}
+.dark .sidebar-tip strong,.dark .sidebar-tip p,.dark .sidebar-tip>span{color:#bbb}
+.dark .workspace-bottom kbd{background:#222;border-color:#444;color:#ccc}
+.dark.previewing #preview-btn{background:#383838;color:#fff}
+.dark .toast{background:#333;color:#fff}
+.property-tabs{gap:20px}
+.animation-play{width:100%;padding:10px}

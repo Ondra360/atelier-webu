@@ -11,6 +11,33 @@ const num = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(val
 const toast = message => { const box = $('#toast'); box.textContent = message; box.classList.remove('hidden'); clearTimeout(toast.timer); toast.timer = setTimeout(() => box.classList.add('hidden'), 3300); };
 const typeNames = { heading:'Nadpis', text:'Text', button:'Tlačítko', image:'Obrázek', link:'Odkaz', input:'Vstupní pole', section:'Sekce', container:'Kontejner', shape:'Tvar', form:'Formulář' };
 const typeIcons = { heading:'Tt', text:'☰', button:'▱', image:'▧', link:'↗', input:'▤', section:'▣', container:'□', shape:'◒', form:'▥' };
+const ANIMATION_PRESETS = [['none','Bez animace'],['fade','Prolnutí'],['rise','Vjezd zdola'],['fall','Vjezd shora'],['left','Vjezd zleva'],['right','Vjezd zprava'],['zoom','Přiblížení'],['bounce','Pružný odraz'],['pulse','Pulzování'],['spin','Otočení']];
+const ANIMATION_DEFAULT = {preset:'none',trigger:'load',duration:800,delay:0,repeat:'once'};
+// The very same animation styles are used on the editor canvas and in the export.
+const ANIMATION_CSS = `
+[data-animation="fade"]{--animation-name:atelier-fade}
+[data-animation="rise"]{--animation-name:atelier-rise}
+[data-animation="fall"]{--animation-name:atelier-fall}
+[data-animation="left"]{--animation-name:atelier-left}
+[data-animation="right"]{--animation-name:atelier-right}
+[data-animation="zoom"]{--animation-name:atelier-zoom}
+[data-animation="bounce"]{--animation-name:atelier-bounce}
+[data-animation="pulse"]{--animation-name:atelier-pulse}
+[data-animation="spin"]{--animation-name:atelier-spin}
+.page .canvas-element.anim-start,.page:not(.editing) .canvas-element[data-animation-trigger="hover"]:hover{animation-name:var(--animation-name);animation-duration:var(--animation-duration,800ms);animation-delay:var(--animation-delay,0ms);animation-iteration-count:var(--animation-count,1);animation-timing-function:ease;animation-fill-mode:both}
+.page:not(.editing) .canvas-element[data-animation-trigger="scroll"]:not(.anim-start){opacity:0}
+@keyframes atelier-fade{from{opacity:0}to{opacity:1}}
+@keyframes atelier-rise{from{opacity:0;transform:translateY(35px)}to{opacity:1;transform:translateY(0)}}
+@keyframes atelier-fall{from{opacity:0;transform:translateY(-35px)}to{opacity:1;transform:translateY(0)}}
+@keyframes atelier-left{from{opacity:0;transform:translateX(-35px)}to{opacity:1;transform:translateX(0)}}
+@keyframes atelier-right{from{opacity:0;transform:translateX(35px)}to{opacity:1;transform:translateX(0)}}
+@keyframes atelier-zoom{from{opacity:0;transform:scale(.75)}to{opacity:1;transform:scale(1)}}
+@keyframes atelier-bounce{0%{opacity:0;transform:translateY(35px)}60%{opacity:1;transform:translateY(-9px)}80%{transform:translateY(4px)}100%{transform:translateY(0)}}
+@keyframes atelier-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@keyframes atelier-spin{from{opacity:0;transform:rotate(-180deg) scale(.8)}to{opacity:1;transform:rotate(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){.page .canvas-element.anim-start,.page:not(.editing) .canvas-element[data-animation-trigger="hover"]:hover{animation-duration:.01ms!important;animation-delay:0ms!important;animation-iteration-count:1!important}}
+`;
+const animationStyle = document.createElement('style'); animationStyle.textContent = ANIMATION_CSS; document.head.appendChild(animationStyle);
 
 function makeElement(type, x = 100, y = 100) {
   const defaults = {
@@ -85,9 +112,18 @@ function renderPages() {
   $('#pages-list').innerHTML=site.pages.map(page=>`<div class="page-entry ${page.id===project.id?'active':''}"><button class="page-select" data-page-select="${esc(page.id)}"><span class="page-entry-icon">▧</span><span><strong>${esc(page.title)}</strong><small>${esc(pageFilename(page))}</small></span></button>${page.id===project.id?`<div class="page-entry-details"><label>Název stránky<input data-page-title="${esc(page.id)}" value="${esc(page.title)}" maxlength="80"></label>${site.pages.length>1?`<button class="page-delete" data-page-delete="${esc(page.id)}">× &nbsp; Smazat stránku</button>`:''}</div>`:''}</div>`).join('');
 }
 function current() { return project.elements.find(item => item.id === selected); }
+function animationFor(el) {
+  const value = {...ANIMATION_DEFAULT,...el.props.animation};
+  if (!ANIMATION_PRESETS.some(([preset])=>preset===value.preset)) value.preset='none';
+  if (!['load','scroll','hover'].includes(value.trigger)) value.trigger='load';
+  value.duration=Math.max(100,Math.min(10000,num(value.duration,800)));
+  value.delay=Math.max(0,Math.min(30000,num(value.delay,0)));
+  value.repeat=value.repeat==='infinite'?'infinite':'once';
+  return value;
+}
 function cssForElement(el, layout, z) {
-  const p = el.props;
-  return `left:${num(layout.x)/WIDTHS[device]*100}%;top:${num(layout.y)}px;width:${Math.max(1,num(layout.w))/WIDTHS[device]*100}%;height:${Math.max(1,num(layout.h))}px;z-index:${z};color:${p.color};background:${p.bg};font-family:${p.fontFamily};font-size:${num(layout.fontSize,16)}px;font-weight:${p.fontWeight};text-align:${p.align};border:${num(p.borderWidth)}px solid ${p.borderColor};border-radius:${num(p.radius)}px;box-shadow:${num(p.shadow) ? `0 ${num(p.shadow)}px ${num(p.shadow)*2}px #26372d38` : 'none'};padding:${num(p.padding)}px;margin:${num(p.margin)}px;white-space:pre-wrap;`;
+  const p = el.props, animation=animationFor(el);
+  return `left:${num(layout.x)/WIDTHS[device]*100}%;top:${num(layout.y)}px;width:${Math.max(1,num(layout.w))/WIDTHS[device]*100}%;height:${Math.max(1,num(layout.h))}px;z-index:${z};color:${p.color};background:${p.bg};font-family:${p.fontFamily};font-size:${num(layout.fontSize,16)}px;font-weight:${p.fontWeight};text-align:${p.align};border:${num(p.borderWidth)}px solid ${p.borderColor};border-radius:${num(p.radius)}px;box-shadow:${num(p.shadow) ? `0 ${num(p.shadow)}px ${num(p.shadow)*2}px #26372d38` : 'none'};padding:${num(p.padding)}px;margin:${num(p.margin)}px;white-space:pre-wrap;--animation-duration:${animation.duration}ms;--animation-delay:${animation.delay}ms;--animation-count:${animation.repeat==='infinite'?'infinite':'1'};`;
 }
 function elementInner(el) {
   const p = el.props;
@@ -99,11 +135,12 @@ function elementInner(el) {
 function elementTag(el) { return el.type === 'button' ? 'button' : el.type === 'link' ? 'a' : el.type === 'heading' ? 'h1' : el.type === 'section' ? 'section' : 'div'; }
 function elementMarkup(el, z, editing, exporting = false) {
   const tag = elementTag(el), p = el.props, clickable = p.action?.type && p.action.type !== 'none';
+  const animation=animationFor(el), animationAttrs=animation.preset==='none'?'':` data-animation="${animation.preset}" data-animation-trigger="${animation.trigger}"`;
   const targetPage = p.action?.type==='page' ? site.pages.find(page=>page.id===p.action.target) : null;
   const actionData = exporting && p.action?.type==='page' ? {...p.action,value:targetPage ? pageFilename(targetPage) : ''} : p.action;
   const action = clickable ? ` data-action="${esc(JSON.stringify(actionData))}"` : '';
   const attrs = tag === 'button' ? ' type="button"' : tag === 'a' ? ' href="#"' : '';
-  return `<${tag} id="${esc(el.id)}" class="canvas-element${editing && selected === el.id ? ' selected' : ''}"${attrs}${action} style="${esc(cssForElement(el,el.layouts[device],z))}">${elementInner(el)}</${tag}>`;
+  return `<${tag} id="${esc(el.id)}" class="canvas-element${editing && selected === el.id ? ' selected' : ''}"${attrs}${action}${animationAttrs} style="${esc(cssForElement(el,el.layouts[device],z))}">${elementInner(el)}</${tag}>`;
 }
 
 function fitCanvas() {
@@ -116,9 +153,11 @@ function fitCanvas() {
 }
 function renderCanvas() {
   const page = $('#page');
+  if (page._atelierAnimationObserver) page._atelierAnimationObserver.disconnect();
   page.classList.toggle('editing', !preview);
   page.innerHTML = project.elements.map((el,index) => elementMarkup(el,index+1,!preview)).join('');
   fitCanvas(); renderLayers();
+  if (preview) startAnimations(page);
 }
 function renderLayers() {
   $('#layer-count').textContent = project.elements.length;
@@ -130,7 +169,7 @@ function field(label, key, value, options = {}) {
   if (type === 'textarea') return `<label class="field"><span>${label}</span><textarea data-key="${key}" data-scope="${scope}">${esc(value)}</textarea></label>`;
   if (type === 'color') return `<label class="field"><span>${label}</span><div class="color-row"><input type="color" data-key="${key}" data-scope="${scope}" value="${/^#[0-9a-f]{6}$/i.test(value)?value:'#ffffff'}"><input type="text" data-key="${key}" data-scope="${scope}" value="${esc(value)}" aria-label="${label} hodnota"></div></label>`;
   if (type === 'checkbox') return `<label class="field"><input type="checkbox" data-key="${key}" data-scope="${scope}" ${value?'checked':''}> ${label}</label>`;
-  return `<label class="field"><span>${label}</span>${type==='number'?`<div class="input-wrap"><input type="number" data-key="${key}" data-scope="${scope}" value="${esc(value)}"><span>px</span></div>`:`<input type="${type}" data-key="${key}" data-scope="${scope}" value="${esc(value)}">`}</label>`;
+  return `<label class="field"><span>${label}</span>${type==='number'?`<div class="input-wrap"><input type="number" data-key="${key}" data-scope="${scope}" value="${esc(value)}"><span>${esc(options.unit || 'px')}</span></div>`:`<input type="${type}" data-key="${key}" data-scope="${scope}" value="${esc(value)}">`}</label>`;
 }
 const section = (title, content) => `<div class="property-section"><div class="section-title"><strong>${title}</strong><span>⌃</span></div>${content}</div>`;
 function renderProperties() {
@@ -138,6 +177,17 @@ function renderProperties() {
   if (!el) { summary.innerHTML = '<div class="selected-icon">✧</div><div><strong>Stránka</strong><small>Vyberte prvek na ploše</small></div><span>⌄</span>'; box.innerHTML = section('Nastavení stránky',field('Výška stránky · '+DEVICE_LABELS[device], 'height', project.pageHeights[device], {type:'number',scope:'page'})+'<p class="hint">Výšku stránky i umístění prvků můžete nastavit zvlášť pro počítač, tablet a mobil.</p>') + '<div class="empty-properties">Kliknutím na prvek upravíte jeho obsah, vzhled i chování.</div>'; return; }
   const p = el.props, pos = el.layouts[device];
   summary.innerHTML = `<div class="selected-icon">${typeIcons[el.type]}</div><div><strong>${esc(el.name)}</strong><small>${typeNames[el.type]} · ${DEVICE_LABELS[device]}</small></div><span>⌄</span>`;
+  if (propTab === 'animation') {
+    const a=animationFor(el);
+    let html=field('Efekt','preset',a.preset,{type:'select',scope:'animation',options:ANIMATION_PRESETS});
+    if (a.preset!=='none') {
+      html+=field('Kdy se spustí','trigger',a.trigger,{type:'select',scope:'animation',options:[['load','Při načtení stránky'],['scroll','Při posunutí na prvek'],['hover','Při najetí myší']]});
+      html+='<div class="property-grid">'+field('Délka','duration',a.duration,{type:'number',scope:'animation',unit:'ms'})+field('Zpoždění','delay',a.delay,{type:'number',scope:'animation',unit:'ms'})+'</div><p class="hint">1 000 ms = 1 sekunda. Délka může být 100–10 000 ms, zpoždění až 30 000 ms.</p>';
+      html+=field('Opakování','repeat',a.repeat,{type:'select',scope:'animation',options:[['once','Jednou'],['infinite','Stále dokola']]});
+      html+='<button class="small-btn animation-play" data-preview-animation>▷ &nbsp; Přehrát animaci</button><p class="hint">Efekt si vyzkoušejte zde nebo v náhledu. Animace platí pro všechna zařízení a bude součástí exportu.</p>';
+    } else html+='<p class="hint">Vyberte efekt a nastavte, kdy a jak se má prvek rozpohybovat.</p>';
+    box.innerHTML=section('Animace prvku',html); return;
+  }
   if (propTab === 'action') {
     const a = p.action || {type:'none',value:'',target:''};
     const choices = [['none','Žádná akce'],['page','Otevřít stránku webu'],['link','Otevřít externí odkaz'],['scroll','Posunout na prvek'],['toggle','Zobrazit / skrýt prvek'],['text','Změnit text prvku'],['alert','Zobrazit upozornění'],['submit','Odeslat formulář']];
@@ -210,6 +260,19 @@ function mountActions(root) {
     if (!form.getAttribute('action')) { event.preventDefault(); alert('Formulář je vyplněn správně, ale není nastavena adresa pro odeslání. Pro doručení je potřeba server nebo externí služba.'); }
   });
 }
+function startAnimations(root) {
+  if (root._atelierAnimationObserver) root._atelierAnimationObserver.disconnect();
+  const elements=[...root.querySelectorAll('[data-animation]')];
+  elements.filter(node=>node.dataset.animationTrigger==='load').forEach(node=>node.classList.add('anim-start'));
+  const onScroll=elements.filter(node=>node.dataset.animationTrigger==='scroll');
+  if (!onScroll.length) return;
+  if (!('IntersectionObserver' in window)) { onScroll.forEach(node=>node.classList.add('anim-start')); return; }
+  const observer=new IntersectionObserver(entries=>{
+    entries.forEach(entry=>{if(entry.isIntersecting){entry.target.classList.add('anim-start');observer.unobserve(entry.target);}});
+  },{threshold:0.1});
+  root._atelierAnimationObserver=observer;
+  onScroll.forEach(node=>observer.observe(node));
+}
 mountActions($('#page'));
 $('#page').addEventListener('atelier:navigate',event=>{event.preventDefault();if(site.pages.some(page=>page.id===event.detail)) switchPage(event.detail);else toast('Nejdříve vyberte cílovou stránku.');});
 
@@ -217,7 +280,7 @@ function exportedCSS() {
   const originalDevice=device;
   const rules = key => { device=key; return site.pages.map(page=>`body[data-page="${page.id}"] .page{height:${page.pageHeights[key]}px}\n`+page.elements.map((el,index)=>`body[data-page="${page.id}"] #${el.id}{${cssForElement(el,el.layouts[key],index+1)}}`).join('\n')).join('\n'); };
   const base=rules('desktop'), tablet=rules('tablet'), mobile=rules('mobile'); device=originalDevice;
-  return `/* Vygenerováno v Ateliéru. Rozměry odpovídají návrhu pro jednotlivá zařízení. */\n*{box-sizing:border-box}\nhtml{scroll-behavior:smooth}\nbody{margin:0}\n.page{position:relative;width:100%;overflow:hidden;background:#fff}\n.canvas-element{position:absolute;box-sizing:border-box;overflow:hidden;margin:0}\n.canvas-element[hidden]{display:none!important}\n.canvas-element img{display:block;width:100%;height:100%;object-fit:cover}\n.canvas-form{display:flex;flex-direction:column;gap:10px;font:inherit;height:100%}\n.canvas-form label{font-size:.8em;font-weight:600;display:flex;flex-direction:column;gap:5px}\n.canvas-form input{font:inherit;height:38px;border:1px solid #dcded8;border-radius:4px;padding:0 10px;background:#fff}\n.canvas-form button{border:0;background:#283b30;color:#fff;border-radius:4px;padding:11px;cursor:pointer}\n${base}\n@media(max-width:1024px){\n${tablet}\n}\n@media(max-width:600px){\n${mobile}\n}\n`;
+  return `/* Vygenerováno v Ateliéru. Rozměry odpovídají návrhu pro jednotlivá zařízení. */\n*{box-sizing:border-box}\nhtml{scroll-behavior:smooth}\nbody{margin:0}\n.page{position:relative;width:100%;overflow:hidden;background:#fff}\n.canvas-element{position:absolute;box-sizing:border-box;overflow:hidden;margin:0}\n.canvas-element[hidden]{display:none!important}\n.canvas-element img{display:block;width:100%;height:100%;object-fit:cover}\n.canvas-form{display:flex;flex-direction:column;gap:10px;font:inherit;height:100%}\n.canvas-form label{font-size:.8em;font-weight:600;display:flex;flex-direction:column;gap:5px}\n.canvas-form input{font:inherit;height:38px;border:1px solid #dcded8;border-radius:4px;padding:0 10px;background:#fff}\n.canvas-form button{border:0;background:#283b30;color:#fff;border-radius:4px;padding:11px;cursor:pointer}\n${ANIMATION_CSS}\n${base}\n@media(max-width:1024px){\n${tablet}\n}\n@media(max-width:600px){\n${mobile}\n}\n`;
 }
 function exportFiles() {
   const originalDevice=device; device='desktop';
@@ -228,7 +291,7 @@ function exportFiles() {
   });
   device=originalDevice;
   files['style.css']=exportedCSS();
-  files['script.js']=`/* Interakce stránek vygenerovaných v Ateliéru. */\n(${mountActions.toString()})(document);\n`;
+  files['script.js']=`/* Interakce a animace stránek vygenerovaných v Ateliéru. */\n(${mountActions.toString()})(document);\n(${startAnimations.toString()})(document);\n`;
   return files;
 }
 function updateExport() { generated=exportFiles(); if(!generated[activeFile])activeFile='index.html'; $('#code-tabs').innerHTML=Object.keys(generated).map(name=>`<button data-file="${esc(name)}" class="${name===activeFile?'active':''}">${esc(name)}</button>`).join(''); $('#export-code').textContent=generated[activeFile]; }
@@ -290,10 +353,21 @@ $('#properties').addEventListener('change',event=>{
   let value=input.type==='checkbox'?input.checked:input.type==='number'?num(input.value):input.value;
   if (['w','h','fontSize'].includes(key)) value=Math.max(1,value);
   if (['borderWidth','radius','padding','shadow'].includes(key)) value=Math.max(0,value);
-  if(scope==='element') el[key]=value; else if(scope==='layout') el.layouts[device][key]=value; else if(scope==='action') el.props.action[key]=value; else el.props[key]=value;
+  if (scope==='animation' && key==='duration') value=Math.max(100,Math.min(10000,value));
+  if (scope==='animation' && key==='delay') value=Math.max(0,Math.min(30000,value));
+  if(scope==='element') el[key]=value; else if(scope==='layout') el.layouts[device][key]=value; else if(scope==='action') el.props.action[key]=value; else if(scope==='animation') {el.props.animation ||= {...ANIMATION_DEFAULT};el.props.animation[key]=value;} else el.props[key]=value;
   renderAll();
 });
-$('#properties').addEventListener('click',e=>{const b=e.target.closest('[data-operation]');if(b)operate(b.dataset.operation);});
+$('#properties').addEventListener('click',e=>{
+  const b=e.target.closest('[data-operation]');if(b){operate(b.dataset.operation);return;}
+  if(!e.target.closest('[data-preview-animation]'))return;
+  const el=current(),node=el&&document.getElementById(el.id);if(!node)return;
+  const a=animationFor(el),originalCount=a.repeat==='infinite'?'infinite':'1';
+  node.classList.remove('anim-start');void node.offsetWidth;
+  node.style.setProperty('--animation-count','1');node.classList.add('anim-start');
+  clearTimeout(node._animationTimer);
+  node._animationTimer=setTimeout(()=>{node.classList.remove('anim-start');node.style.setProperty('--animation-count',originalCount);},a.duration+a.delay+100);
+});
 
 let drag=null;
 $('#page').addEventListener('pointerdown',event=>{

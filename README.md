@@ -9,6 +9,7 @@ Jednoduchý vizuální editor webů s více stránkami. Aplikace je statická a 
 - Kliknutím na prázdné místo nastavíte výšku stránky pro aktuální zařízení. Sekce a kontejnery jsou vizuální vrstvy: ostatní prvky lze umístit nad ně, ale nepřesouvají se automaticky společně s nimi.
 - V levé záložce **Stránky** přidáte, přejmenujete a přepnete stránky webu. V interakcích tlačítka nebo odkazu vyberte **Otevřít stránku webu** a cílovou stránku. Úvodní stránka je vždy `index.html`.
 - Tlačítkem **Tmavý režim** přepnete vzhled editoru; návrh stránky si zachová vlastní barvy.
+- Po označení prvku v záložce **Animace** vyberte efekt, spuštění při načtení, při posunutí na prvek nebo při najetí myší, délku, zpoždění a opakování. Tlačítkem **Přehrát animaci** si efekt vyzkoušíte přímo v editoru; v náhledu a exportu se spouští podle nastavených pravidel. Jde o přednastavené efekty, nikoliv časovou osu s vlastními klíčovými snímky. Prohlížečům s omezeným pohybem se přizpůsobí.
 - Projekt včetně všech stránek se ukládá tlačítkem **Uložit projekt** do úložiště daného prohlížeče a adresy webu. Vymazání dat prohlížeče jej může odstranit. Starší jednostránkový projekt se při načtení převede automaticky.
 - V náhledu můžete vyzkoušet nastavené akce i přechody mezi stránkami. Export zobrazí a samostatně stáhne každé HTML a sdílené `style.css` a `script.js`. Můžete také stáhnout ZIP s celým webem. Po rozbalení ponechte všechny soubory ve stejné složce a otevřete `index.html`.
 
