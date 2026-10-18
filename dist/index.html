@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ateliér — váš prostor pro tvorbu webu</title>
+  <meta name="description" content="Vizuální editor webových stránek s exportem zdrojového kódu.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand"><div class="brand-mark"><span></span><span></span><span></span><span></span></div><div><strong>ateliér<span>.</span></strong><small>WEBOVÝ EDITOR</small></div></div>
+      <div class="project-title"><span class="project-icon">▧</span><div><strong>Můj první web</strong><small id="save-status">Neuložené změny</small></div><span class="chevron">⌄</span></div>
+      <div class="top-actions">
+        <button class="btn btn-ghost" id="undo-btn" title="Zpět (Ctrl+Z)"><span class="icon">↶</span></button>
+        <button class="btn btn-ghost" id="redo-btn" title="Znovu (Ctrl+Shift+Z)"><span class="icon">↷</span></button>
+        <span class="divider"></span>
+        <button class="btn btn-light" id="save-btn"><span>▣</span> Uložit projekt</button>
+        <button class="btn btn-light" id="preview-btn"><span>▷</span> Náhled</button>
+        <button class="btn btn-primary" id="export-btn"><span>↗</span> Exportovat kód</button>
+      </div>
+    </header>
+    <div class="editor-shell">
+      <aside class="left-panel">
+        <div class="panel-heading"><div><span class="eyebrow">VAŠE KNIHOVNA</span><h2>Prvky</h2></div><span class="heading-symbol">✳</span></div>
+        <p class="panel-intro">Vše, co potřebujete k vytvoření stránky.</p>
+        <div class="sidebar-tabs"><button class="active" data-left-tab="elements">Přidat prvky</button><button data-left-tab="layers">Vrstvy <span id="layer-count"></span></button></div>
+        <div id="elements-pane" class="left-scroll">
+          <div class="library-label">ZÁKLADNÍ PRVKY <span>01</span></div>
+          <div class="element-grid">
+            <button class="element-card" draggable="true" data-add="heading"><span class="element-icon serif-icon">T<span>t</span></span><strong>Nadpis</strong><small>Výrazný text</small></button>
+            <button class="element-card" draggable="true" data-add="text"><span class="element-icon">☰</span><strong>Text</strong><small>Odstavec</small></button>
+            <button class="element-card" draggable="true" data-add="button"><span class="element-icon">▱</span><strong>Tlačítko</strong><small>Výzva k akci</small></button>
+            <button class="element-card" draggable="true" data-add="image"><span class="element-icon">▧</span><strong>Obrázek</strong><small>Fotka či grafika</small></button>
+            <button class="element-card" draggable="true" data-add="link"><span class="element-icon">↗</span><strong>Odkaz</strong><small>Propojte stránky</small></button>
+            <button class="element-card" draggable="true" data-add="input"><span class="element-icon">▤</span><strong>Pole</strong><small>Textový vstup</small></button>
+          </div>
+          <div class="library-label">ROZLOŽENÍ <span>02</span></div>
+          <div class="element-grid">
+            <button class="element-card" draggable="true" data-add="section"><span class="element-icon">▣</span><strong>Sekce</strong><small>Část stránky</small></button>
+            <button class="element-card" draggable="true" data-add="container"><span class="element-icon">□</span><strong>Kontejner</strong><small>Prostor pro obsah</small></button>
+            <button class="element-card" draggable="true" data-add="shape"><span class="element-icon">◒</span><strong>Tvar</strong><small>Vizuální detail</small></button>
+            <button class="element-card" draggable="true" data-add="form"><span class="element-icon">▥</span><strong>Formulář</strong><small>Sběr odpovědí</small></button>
+          </div>
+          <div class="sidebar-tip"><span>✦</span><div><strong>Malý tip</strong><p>Prvek přetáhněte na plochu nebo na něj jednoduše klikněte.</p></div></div>
+        </div>
+        <div id="layers-pane" class="left-scroll hidden"><div class="library-label">PRVKY NA STRÁNCE <span>VRSTVY</span></div><div id="layers-list"></div><p class="hint">Pořadí vrstev můžete měnit v pravém panelu.</p></div>
+        <div class="sidebar-footer"><span class="footer-avatar">A</span><div><strong>Váš kreativní prostor</strong><small>Tvořte bez omezení</small></div><span>✦</span></div>
+      </aside>
+      <main class="workspace">
+        <div class="workspace-top"><div><div class="breadcrumb">PROJEKT <span>/</span> STRÁNKA 01</div><div class="workspace-title"><h1>Domovská stránka</h1><span class="page-badge">ÚVODNÍ STRÁNKA</span></div><p>Vaše nápady začínají právě tady.</p></div><div class="workspace-note"><span class="status-dot"></span><span>Režim úprav</span></div></div>
+        <div class="canvas-toolbar"><div class="toolbar-label"><span class="mini-page">▧</span><div><strong>Pracovní plocha</strong><small id="canvas-size">1200 × 1000 px</small></div></div><div class="devices" aria-label="Velikost obrazovky"><button class="device active" data-device="desktop" title="Počítač">▱ <span>Počítač</span></button><button class="device" data-device="tablet" title="Tablet">▯ <span>Tablet</span></button><button class="device" data-device="mobile" title="Mobil">▯ <span>Mobil</span></button></div><div class="toolbar-right"><span id="zoom-label">100 %</span><button id="fit-btn" title="Přizpůsobit plochu">⌗</button></div></div>
+        <div class="canvas-scroll" id="canvas-scroll"><div class="canvas-stage" id="canvas-stage"><div class="page-wrap" id="page-wrap"><div class="page" id="page" aria-label="Pracovní plocha"></div></div></div></div>
+        <div class="workspace-bottom"><span><span class="status-dot"></span> Vše připraveno k tvoření</span><span>Dvojklikem upravíte text <kbd>⌘</kbd> / <kbd>Ctrl</kbd> + <kbd>Z</kbd> zpět</span></div>
+      </main>
+      <aside class="right-panel">
+        <div class="panel-heading right-heading"><div><span class="eyebrow">DETAILY PRVKU</span><h2>Vlastnosti</h2></div><span class="heading-symbol">⚙</span></div>
+        <div class="selected-summary" id="selected-summary"><div class="selected-icon">Tt</div><div><strong>Vyberte prvek</strong><small>Klikněte na prvek na ploše</small></div><span>⌄</span></div>
+        <div class="property-tabs"><button class="active" data-prop-tab="design">Vzhled</button><button data-prop-tab="action">Interakce</button></div>
+        <div class="properties-scroll" id="properties"></div>
+        <div class="right-footer"><span>✧</span> Každý detail má své místo.</div>
+      </aside>
+    </div>
+  </div>
+  <div class="modal hidden" id="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-title"><div class="modal-card"><div class="modal-header"><div><span class="eyebrow">PŘIPRAVENO K POUŽITÍ</span><h2 id="export-title">Váš web, váš kód.</h2><p>Uložte všechny tři soubory do jedné složky a otevřete index.html.</p></div><button class="close-modal" data-close="export-modal" aria-label="Zavřít">×</button></div><div class="code-tabs"><button class="active" data-file="index.html">index.html</button><button data-file="style.css">style.css</button><button data-file="script.js">script.js</button></div><pre><code id="export-code"></code></pre><div class="modal-footer"><span>↗ &nbsp; Obrázky z URL vyžadují připojení k internetu.</span><div><button class="btn btn-light" id="copy-code">Kopírovat</button><button class="btn btn-primary" id="download-code">↓ &nbsp; Stáhnout soubor</button></div></div></div></div>
+  <div class="toast hidden" id="toast" role="status"></div>
+  <script src="app.js"></script>
+</body>
+</html>

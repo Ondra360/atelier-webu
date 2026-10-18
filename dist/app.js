@@ -1,0 +1,278 @@
+/* Ateliér — the project model is also the single source for the exported page. */
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const WIDTHS = { desktop: 1200, tablet: 768, mobile: 375 };
+const DEVICE_LABELS = { desktop: 'počítač', tablet: 'tablet', mobile: 'mobil' };
+const STORAGE_KEY = 'atelier-web-project-v1';
+const clone = value => JSON.parse(JSON.stringify(value));
+const uid = () => 'el-' + Math.random().toString(36).slice(2, 10);
+const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const num = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+const toast = message => { const box = $('#toast'); box.textContent = message; box.classList.remove('hidden'); clearTimeout(toast.timer); toast.timer = setTimeout(() => box.classList.add('hidden'), 3300); };
+const typeNames = { heading:'Nadpis', text:'Text', button:'Tlačítko', image:'Obrázek', link:'Odkaz', input:'Vstupní pole', section:'Sekce', container:'Kontejner', shape:'Tvar', form:'Formulář' };
+const typeIcons = { heading:'Tt', text:'☰', button:'▱', image:'▧', link:'↗', input:'▤', section:'▣', container:'□', shape:'◒', form:'▥' };
+
+function makeElement(type, x = 100, y = 100) {
+  const defaults = {
+    heading: ['Váš nový nadpis', 420, 90, 48, '#26372d', 'transparent'],
+    text: ['Sem napište svůj text. Každý skvělý příběh někde začíná.', 350, 80, 17, '#67746b', 'transparent'],
+    button: ['Klikněte sem', 160, 48, 14, '#ffffff', '#2c4435'],
+    image: ['', 300, 220, 16, '#26372d', '#e7ece3'],
+    link: ['Text odkazu ↗', 180, 35, 15, '#344e3b', 'transparent'],
+    input: ['', 260, 48, 14, '#35473a', '#ffffff'],
+    section: ['', 1000, 280, 16, '#26372d', '#f0f3eb'],
+    container: ['', 350, 220, 16, '#26372d', '#f4f4ed'],
+    shape: ['', 120, 120, 16, '#26372d', '#e4b99e'],
+    form: ['', 320, 240, 14, '#35473a', '#ffffff']
+  }[type];
+  const [text,w,h,fontSize,color,bg] = defaults;
+  const makeLayout = (width, scale) => {
+    const responsiveWidth = width === 1200 ? w : Math.min(width - 40, Math.max(type === 'button' ? 150 : 140, Math.round(w * (width === 375 ? .8 : scale))));
+    return { x: Math.max(0,Math.min(Math.round(x * scale),width-responsiveWidth-20)), y, w: responsiveWidth, h, fontSize: Math.max(type === 'heading' ? 28 : 10, Math.round(fontSize * (width === 375 && type === 'heading' ? .72 : 1))) };
+  };
+  return { id: uid(), type, name: typeNames[type], text, props: { color, bg, fontFamily: type === 'heading' ? 'Georgia' : 'Arial', fontWeight: '400', borderColor:'#dce2d9', borderWidth: type === 'input' ? 1 : 0, radius: type === 'button' ? 5 : type === 'shape' ? 60 : 0, shadow:0, padding: type === 'button' ? 10 : type === 'form' ? 16 : 0, margin:0, align: type === 'button' ? 'center' : 'left', src: '', alt:'Obrázek', placeholder:'Napište sem…', required:false, fieldName:'zprava', inputType:'text', formTarget:'', formAction:'', formNameLabel:'Jméno', formEmailLabel:'E-mail', formButton:'Odeslat', action:{ type:'none', value:'', target:'' } }, layouts:{ desktop:makeLayout(1200,1), tablet:makeLayout(768,.64), mobile:makeLayout(375,.3125) } };
+}
+
+function sampleProject() {
+  const project = { version:1, pageHeights:{desktop:1000,tablet:1100,mobile:1330}, elements:[] };
+  const add = (type, name, text, desktop, tablet, mobile, props = {}) => {
+    const el = makeElement(type); el.name = name; el.text = text; el.layouts = { desktop, tablet, mobile }; Object.assign(el.props, props); project.elements.push(el); return el;
+  };
+  const l = (x,y,w,h,fontSize) => ({x,y,w,h,fontSize});
+  add('text','Logo','morrow.',l(80,45,180,36,27),l(48,40,150,34,25),l(28,30,130,32,23),{fontFamily:'Georgia',color:'#243d30'});
+  add('text','Navigace','O NÁS     SLUŽBY     KONTAKT',l(714,53,340,25,11),l(392,49,300,24,10),l(28,78,290,24,10),{color:'#53675a',fontWeight:'700'});
+  add('shape','Dekorace','',l(735,155,365,520,16),l(464,165,235,410,16),l(220,390,130,240,16),{bg:'#e8c7b3',radius:190});
+  add('image','Úvodní obrázek','',l(700,185,350,465,16),l(430,190,240,360,16),l(48,425,270,310,16),{src:'https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=1000&q=85',alt:'Světlý kreativní prostor',radius:180});
+  add('text','Malý úvod','PROSTOR PRO NOVÉ NÁPADY',l(85,190,360,28,11),l(50,185,330,28,10),l(28,130,300,25,10),{fontWeight:'700',color:'#b4795f'});
+  add('heading','Hlavní nadpis','Tvoříme prostor\npro vaše nápady.',l(80,238,620,170,67),l(48,226,400,150,48),l(28,165,320,130,38),{fontFamily:'Georgia',color:'#263d30'});
+  add('text','Úvodní text','Věříme, že ty nejlepší věci vznikají s lehkostí. Společně proměníme vaše nápady v něco výjimečného.',l(85,430,470,75,17),l(50,392,350,90,15),l(28,300,305,90,15),{color:'#78877b'});
+  const cta = add('button','Hlavní tlačítko','Pojďme se potkat  ↗',l(85,540,190,54,13),l(50,500,180,50,12),l(28,770,185,50,12),{bg:'#2c4435',color:'#ffffff',radius:4,fontWeight:'700',align:'center',padding:12});
+  const footer = add('text','Doplňující text','PROMYŠLENĚ. JEDNODUŠE. SPOLEČNĚ.',l(85,765,460,25,10),l(50,665,410,25,10),l(28,875,310,25,9),{color:'#a2aca1',fontWeight:'700'});
+  cta.props.action = {type:'scroll',value:'',target:footer.id};
+  return project;
+}
+
+let project;
+try { const stored = localStorage.getItem(STORAGE_KEY); project = stored ? JSON.parse(stored) : sampleProject(); if (!project.elements || !project.pageHeights) throw Error('invalid project'); }
+catch { project = sampleProject(); }
+let selected = null, device = 'desktop', propTab = 'design', preview = false, zoom = 1, history = [], future = [], activeFile = 'index.html', generated = {};
+let dirty = false;
+
+function remember() { history.push(JSON.stringify(project)); if (history.length > 60) history.shift(); future = []; dirty = true; $('#save-status').textContent = 'Neuložené změny'; }
+function changeHistory(direction) {
+  const from = direction === 'undo' ? history : future, to = direction === 'undo' ? future : history;
+  if (!from.length) return;
+  to.push(JSON.stringify(project)); project = JSON.parse(from.pop()); selected = null; dirty = true; $('#save-status').textContent = 'Neuložené změny'; renderAll();
+}
+function current() { return project.elements.find(item => item.id === selected); }
+function cssForElement(el, layout, z) {
+  const p = el.props;
+  return `left:${num(layout.x)/WIDTHS[device]*100}%;top:${num(layout.y)}px;width:${Math.max(1,num(layout.w))/WIDTHS[device]*100}%;height:${Math.max(1,num(layout.h))}px;z-index:${z};color:${p.color};background:${p.bg};font-family:${p.fontFamily};font-size:${num(layout.fontSize,16)}px;font-weight:${p.fontWeight};text-align:${p.align};border:${num(p.borderWidth)}px solid ${p.borderColor};border-radius:${num(p.radius)}px;box-shadow:${num(p.shadow) ? `0 ${num(p.shadow)}px ${num(p.shadow)*2}px #26372d38` : 'none'};padding:${num(p.padding)}px;margin:${num(p.margin)}px;white-space:pre-wrap;`;
+}
+function elementInner(el) {
+  const p = el.props;
+  if (el.type === 'image') return p.src ? `<img src="${esc(p.src)}" alt="${esc(p.alt)}">` : '<div style="height:100%;display:grid;place-items:center;color:#98a99a;background:#edf1eb;font:14px Arial">▧ &nbsp; Přidejte obrázek</div>';
+  if (el.type === 'input') return `<input type="${esc(p.inputType || 'text')}" name="${esc(p.fieldName || 'zprava')}" ${p.formTarget ? `form="${esc(p.formTarget)}-form"` : ''} aria-label="${esc(p.placeholder || 'Vstupní pole')}" placeholder="${esc(p.placeholder)}" ${p.required?'required':''} style="width:100%;height:100%;border:0;outline:0;background:transparent;color:inherit;text-align:inherit">`;
+  if (el.type === 'form') return `<form id="${esc(el.id)}-form" class="canvas-form" ${p.formAction ? `action="${esc(p.formAction)}"` : ''} method="post"><label>${esc(p.formNameLabel || 'Jméno')}<input name="name" placeholder="Vaše jméno" required></label><label>${esc(p.formEmailLabel || 'E-mail')}<input type="email" name="email" placeholder="vas@email.cz" required></label><button type="submit">${esc(p.formButton || 'Odeslat')}</button></form>`;
+  return esc(el.text).replace(/\n/g,'<br>');
+}
+function elementTag(el) { return el.type === 'button' ? 'button' : el.type === 'link' ? 'a' : el.type === 'heading' ? 'h1' : el.type === 'section' ? 'section' : 'div'; }
+function elementMarkup(el, z, editing) {
+  const tag = elementTag(el), p = el.props, clickable = p.action?.type && p.action.type !== 'none';
+  const action = clickable ? ` data-action="${esc(JSON.stringify(p.action))}"` : '';
+  const attrs = tag === 'button' ? ' type="button"' : tag === 'a' ? ' href="#"' : '';
+  return `<${tag} id="${esc(el.id)}" class="canvas-element${editing && selected === el.id ? ' selected' : ''}"${attrs}${action} style="${esc(cssForElement(el,el.layouts[device],z))}">${elementInner(el)}</${tag}>`;
+}
+
+function fitCanvas() {
+  const width = WIDTHS[device], available = Math.max(180, $('#canvas-scroll').clientWidth - 60);
+  zoom = Math.min(1, available / width);
+  const page = $('#page'), wrap = $('#page-wrap');
+  page.style.width = width + 'px'; page.style.height = project.pageHeights[device] + 'px'; page.style.transform = `scale(${zoom})`;
+  wrap.style.width = width * zoom + 'px'; wrap.style.height = project.pageHeights[device] * zoom + 'px';
+  $('#zoom-label').textContent = Math.round(zoom * 100) + ' %'; $('#canvas-size').textContent = `${width} × ${project.pageHeights[device]} px`;
+}
+function renderCanvas() {
+  const page = $('#page');
+  page.classList.toggle('editing', !preview);
+  page.innerHTML = project.elements.map((el,index) => elementMarkup(el,index+1,!preview)).join('');
+  fitCanvas(); renderLayers();
+}
+function renderLayers() {
+  $('#layer-count').textContent = project.elements.length;
+  $('#layers-list').innerHTML = [...project.elements].reverse().map(el => `<button class="layer ${selected===el.id?'active':''}" data-layer="${esc(el.id)}"><span>${typeIcons[el.type]}</span>${esc(el.name)}<span>⋮</span></button>`).join('');
+}
+function field(label, key, value, options = {}) {
+  const type = options.type || 'text', scope = options.scope || 'props';
+  if (type === 'select') return `<label class="field"><span>${label}</span><select data-key="${key}" data-scope="${scope}">${options.options.map(([v,n]) => `<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
+  if (type === 'textarea') return `<label class="field"><span>${label}</span><textarea data-key="${key}" data-scope="${scope}">${esc(value)}</textarea></label>`;
+  if (type === 'color') return `<label class="field"><span>${label}</span><div class="color-row"><input type="color" data-key="${key}" data-scope="${scope}" value="${/^#[0-9a-f]{6}$/i.test(value)?value:'#ffffff'}"><input type="text" data-key="${key}" data-scope="${scope}" value="${esc(value)}" aria-label="${label} hodnota"></div></label>`;
+  if (type === 'checkbox') return `<label class="field"><input type="checkbox" data-key="${key}" data-scope="${scope}" ${value?'checked':''}> ${label}</label>`;
+  return `<label class="field"><span>${label}</span>${type==='number'?`<div class="input-wrap"><input type="number" data-key="${key}" data-scope="${scope}" value="${esc(value)}"><span>px</span></div>`:`<input type="${type}" data-key="${key}" data-scope="${scope}" value="${esc(value)}">`}</label>`;
+}
+const section = (title, content) => `<div class="property-section"><div class="section-title"><strong>${title}</strong><span>⌃</span></div>${content}</div>`;
+function renderProperties() {
+  const el = current(), summary = $('#selected-summary'), box = $('#properties');
+  if (!el) { summary.innerHTML = '<div class="selected-icon">✧</div><div><strong>Stránka</strong><small>Vyberte prvek na ploše</small></div><span>⌄</span>'; box.innerHTML = section('Nastavení stránky',field('Výška stránky · '+DEVICE_LABELS[device], 'height', project.pageHeights[device], {type:'number',scope:'page'})+'<p class="hint">Výšku stránky i umístění prvků můžete nastavit zvlášť pro počítač, tablet a mobil.</p>') + '<div class="empty-properties">Kliknutím na prvek upravíte jeho obsah, vzhled i chování.</div>'; return; }
+  const p = el.props, pos = el.layouts[device];
+  summary.innerHTML = `<div class="selected-icon">${typeIcons[el.type]}</div><div><strong>${esc(el.name)}</strong><small>${typeNames[el.type]} · ${DEVICE_LABELS[device]}</small></div><span>⌄</span>`;
+  if (propTab === 'action') {
+    const a = p.action || {type:'none',value:'',target:''};
+    const choices = [['none','Žádná akce'],['link','Otevřít odkaz'],['scroll','Posunout na prvek'],['toggle','Zobrazit / skrýt prvek'],['text','Změnit text prvku'],['alert','Zobrazit upozornění'],['submit','Odeslat formulář']];
+    const targets = project.elements.filter(item => item.id !== el.id && (a.type !== 'submit' || item.type === 'form') && (a.type !== 'text' || ['heading','text','button','link'].includes(item.type))).map(item => [item.id, item.name]);
+    let html = field('Po kliknutí', 'type', a.type, {type:'select',scope:'action',options:choices});
+    if (['scroll','toggle','text','submit'].includes(a.type)) html += field('Cílový prvek','target',a.target,{type:'select',scope:'action',options:[['','Vyberte prvek'],...targets]});
+    if (['link','alert','text'].includes(a.type)) html += field(a.type === 'link' ? 'Adresa odkazu' : a.type === 'alert' ? 'Text upozornění' : 'Nový text','value',a.value,{scope:'action',type:'textarea'});
+    html += '<p class="hint">Akce funguje v náhledu i v exportované stránce. Pro změnu cíle vyberte jiný prvek.</p>';
+    if (el.type === 'form') html += `<div class="notice">Formulář kontroluje povinná pole. Skutečné odeslání vyžaduje adresu serveru nebo formulářové služby v záložce Vzhled.</div>`;
+    box.innerHTML = section('Chování prvku',html); return;
+  }
+  let content = field('Název vrstvy','name',el.name,{scope:'element'});
+  if (['heading','text','button','link'].includes(el.type)) content += field('Obsah','text',el.text,{type:'textarea',scope:'element'});
+  if (el.type === 'image') content += field('Adresa obrázku','src',p.src) + field('Alternativní text','alt',p.alt) + '<label class="field"><span>Nebo nahrát obrázek do projektu</span><input id="image-upload" type="file" accept="image/*"></label><p class="hint">Nahraný obrázek se vloží přímo do exportovaného HTML.</p>';
+  if (el.type === 'input') content += field('Zástupný text','placeholder',p.placeholder) + field('Název pole pro odeslání','fieldName',p.fieldName || 'zprava') + field('Typ pole','inputType',p.inputType || 'text',{type:'select',options:[['text','Text'],['email','E-mail'],['tel','Telefon'],['number','Číslo']]}) + field('Připojit k formuláři','formTarget',p.formTarget || '',{type:'select',options:[['','Bez formuláře'],...project.elements.filter(item=>item.type==='form').map(item=>[item.id,item.name])]}) + field('Povinné pole','required',p.required,{type:'checkbox'});
+  if (el.type === 'form') content += field('Popisek prvního pole','formNameLabel',p.formNameLabel || 'Jméno') + field('Popisek e-mailu','formEmailLabel',p.formEmailLabel || 'E-mail') + field('Text tlačítka','formButton',p.formButton || 'Odeslat') + field('Adresa pro odeslání (URL)','formAction',p.formAction) + '<div class="notice">Povinná pole se ověřují v prohlížeči. Pro skutečné doručení zadejte adresu serveru nebo externí služby; bez ní se formulář neodešle. Další pole připojíte v jeho vlastnostech.</div>';
+  let geometry = `<p class="hint">Rozměry a pozice platí pro: <strong>${DEVICE_LABELS[device]}</strong>.</p><div class="property-grid">${field('Pozice X','x',pos.x,{type:'number',scope:'layout'})}${field('Pozice Y','y',pos.y,{type:'number',scope:'layout'})}${field('Šířka','w',pos.w,{type:'number',scope:'layout'})}${field('Výška','h',pos.h,{type:'number',scope:'layout'})}</div>`;
+  if (['heading','text','button','link','input','form'].includes(el.type)) geometry += field('Velikost písma','fontSize',pos.fontSize,{type:'number',scope:'layout'});
+  let typography = field('Písmo','fontFamily',p.fontFamily,{type:'select',options:[['Arial','Arial'],['Georgia','Georgia'],['Verdana','Verdana'],['Tahoma','Tahoma'],['Trebuchet MS','Trebuchet MS'],['Courier New','Courier New']]}) + field('Řez','fontWeight',p.fontWeight,{type:'select',options:[['400','Běžný'],['700','Tučný']]}) + field('Barva textu','color',p.color,{type:'color'}) + field('Zarovnání','align',p.align,{type:'select',options:[['left','Vlevo'],['center','Na střed'],['right','Vpravo']]});
+  let appearance = field('Pozadí (barva nebo transparent)','bg',p.bg,{type:'color'}) + '<div class="property-grid">' + field('Rámeček','borderWidth',p.borderWidth,{type:'number'}) + field('Zaoblení','radius',p.radius,{type:'number'}) + field('Vnitřní mezera','padding',p.padding,{type:'number'}) + field('Vnější mezera','margin',p.margin,{type:'number'}) + field('Stín','shadow',p.shadow,{type:'number'}) + '</div>' + field('Barva rámečku','borderColor',p.borderColor,{type:'color'});
+  box.innerHTML = section('Obsah',content) + section('Rozložení',geometry) + section('Typografie',typography) + section('Vzhled',appearance) + section('Pořadí a úpravy','<div class="property-actions"><button class="small-btn" data-operation="back">↓ Dozadu</button><button class="small-btn" data-operation="front">↑ Dopředu</button></div><div class="property-actions" style="margin-top:7px"><button class="small-btn" data-operation="duplicate">⧉ Kopírovat</button><button class="small-btn" data-operation="delete">× Smazat</button></div>');
+}
+function renderAll() { renderCanvas(); renderProperties(); }
+
+function addElement(type, x, y) {
+  remember(); const scale = WIDTHS[device] / 1200;
+  const el = makeElement(type, x === undefined ? 100 : x/scale, y === undefined ? 100 : y);
+  if (x !== undefined) { el.layouts[device].x = Math.round(x); el.layouts[device].y = Math.round(y); }
+  project.elements.push(el); selected = el.id; renderAll();
+  if (window.innerWidth <= 700) $('.right-panel').classList.add('mobile-open');
+  toast(`${typeNames[type]} přidán na stránku`);
+}
+function operate(op) {
+  const index = project.elements.findIndex(el=>el.id===selected); if(index<0) return;
+  remember();
+  if (op==='delete') { project.elements.splice(index,1); selected=null; }
+  if (op==='duplicate') { const el=clone(project.elements[index]); el.id=uid(); el.name += ' kopie'; Object.values(el.layouts).forEach(l=>{l.x+=15;l.y+=15}); project.elements.splice(index+1,0,el); selected=el.id; }
+  if (op==='front' && index<project.elements.length-1) [project.elements[index],project.elements[index+1]]=[project.elements[index+1],project.elements[index]];
+  if (op==='back' && index>0) [project.elements[index],project.elements[index-1]]=[project.elements[index-1],project.elements[index]];
+  renderAll();
+}
+
+function mountActions(root) {
+  root.addEventListener('click', event => {
+    if (root.classList && root.classList.contains('editing')) return;
+    const source = event.target.closest('[data-action]'); if (!source || !root.contains(source)) return;
+    let action; try { action=JSON.parse(source.dataset.action); } catch { return; }
+    event.preventDefault();
+    const target = action.target ? root.querySelector('#' + CSS.escape(action.target)) : null;
+    if (action.type==='link' && action.value) {
+      const url=action.value.trim();
+      try { const parsed=new URL(url,document.baseURI); if (!['http:','https:','mailto:','tel:','file:'].includes(parsed.protocol)) throw Error('unsupported protocol'); window.open(url, '_blank', 'noopener'); }
+      catch { alert('Zadejte platnou adresu, například https://example.com nebo dalsi-stranka.html.'); }
+    }
+    if (action.type==='scroll' && target) target.scrollIntoView({behavior:'smooth',block:'start'});
+    if (action.type==='toggle' && target) target.hidden = !target.hidden;
+    if (action.type==='text' && target) target.textContent = action.value || '';
+    if (action.type==='alert') alert(action.value || 'Upozornění');
+    if (action.type==='submit' && target) { const form=target.matches('form') ? target : target.querySelector('form'); if (form) form.requestSubmit(); }
+  });
+  root.addEventListener('submit', event => {
+    if (root.classList && root.classList.contains('editing')) { event.preventDefault(); return; }
+    const form = event.target;
+    if (!form.getAttribute('action')) { event.preventDefault(); alert('Formulář je vyplněn správně, ale není nastavena adresa pro odeslání. Pro doručení je potřeba server nebo externí služba.'); }
+  });
+}
+mountActions($('#page'));
+
+function exportedCSS() {
+  const originalDevice=device;
+  const rules = key => { device=key; return project.elements.map((el,index)=>`#${el.id}{${cssForElement(el,el.layouts[key],index+1)}}`).join('\n'); };
+  const base=rules('desktop'), tablet=rules('tablet'), mobile=rules('mobile'); device=originalDevice;
+  return `/* Vygenerováno v Ateliéru. Rozměry odpovídají návrhu pro jednotlivá zařízení. */\n*{box-sizing:border-box}\nhtml{scroll-behavior:smooth}\nbody{margin:0}\n.page{position:relative;width:100%;height:${project.pageHeights.desktop}px;overflow:hidden;background:#fff}\n.canvas-element{position:absolute;box-sizing:border-box;overflow:hidden;margin:0}\n.canvas-element[hidden]{display:none!important}\n.canvas-element img{display:block;width:100%;height:100%;object-fit:cover}\n.canvas-form{display:flex;flex-direction:column;gap:10px;font:inherit;height:100%}\n.canvas-form label{font-size:.8em;font-weight:600;display:flex;flex-direction:column;gap:5px}\n.canvas-form input{font:inherit;height:38px;border:1px solid #dcded8;border-radius:4px;padding:0 10px;background:#fff}\n.canvas-form button{border:0;background:#283b30;color:#fff;border-radius:4px;padding:11px;cursor:pointer}\n${base}\n@media(max-width:1024px){.page{height:${project.pageHeights.tablet}px}\n${tablet}\n}\n@media(max-width:600px){.page{height:${project.pageHeights.mobile}px}\n${mobile}\n}\n`;
+}
+function exportFiles() {
+  const originalDevice=device; device='desktop';
+  const elements = project.elements.map((el,index) => {
+    const markup=elementMarkup(el,index+1,false);
+    return markup.replace(/ style="[^"]*"(?=>)/,'');
+  }).join('\n    '); device=originalDevice;
+  return {
+    'index.html':`<!doctype html>\n<html lang="cs">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>Moje stránka</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <main class="page">\n    ${elements}\n  </main>\n  <script src="script.js"><\/script>\n</body>\n</html>\n`,
+    'style.css': exportedCSS(),
+    'script.js': `/* Interakce stránky vygenerované v Ateliéru. */\n(${mountActions.toString()})(document);\n`
+  };
+}
+function updateExport() { generated=exportFiles(); $('#export-code').textContent=generated[activeFile]; $$('.code-tabs button').forEach(b=>b.classList.toggle('active',b.dataset.file===activeFile)); }
+function download(name, content) { const url=URL.createObjectURL(new Blob([content],{type:'text/plain;charset=utf-8'})); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
+
+// Editor controls
+$$('[data-left-tab]').forEach(button=>button.addEventListener('click',()=>{ $$('[data-left-tab]').forEach(b=>b.classList.toggle('active',b===button)); $('#elements-pane').classList.toggle('hidden',button.dataset.leftTab!=='elements'); $('#layers-pane').classList.toggle('hidden',button.dataset.leftTab!=='layers'); }));
+$$('[data-add]').forEach(button=>{ button.addEventListener('click',()=>addElement(button.dataset.add)); button.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',button.dataset.add)); });
+$('#page').addEventListener('dragover',event=>{ if (!preview) event.preventDefault(); });
+$('#page').addEventListener('drop',event=>{ event.preventDefault(); const type=event.dataTransfer.getData('text/plain'); if (!typeNames[type] || preview) return; const rect=$('#page').getBoundingClientRect(); addElement(type,(event.clientX-rect.left)/zoom,(event.clientY-rect.top)/zoom); });
+$('#layers-list').addEventListener('click',event=>{const layer=event.target.closest('[data-layer]'); if(layer){selected=layer.dataset.layer;renderAll();}});
+$$('[data-prop-tab]').forEach(button=>button.addEventListener('click',()=>{propTab=button.dataset.propTab;$$('[data-prop-tab]').forEach(b=>b.classList.toggle('active',b===button));renderProperties();}));
+$$('[data-device]').forEach(button=>button.addEventListener('click',()=>{device=button.dataset.device;$$('[data-device]').forEach(b=>b.classList.toggle('active',b===button));renderAll();}));
+$('#fit-btn').addEventListener('click',fitCanvas); window.addEventListener('resize',fitCanvas);
+$('#undo-btn').addEventListener('click',()=>changeHistory('undo')); $('#redo-btn').addEventListener('click',()=>changeHistory('redo'));
+$('#save-btn').addEventListener('click',()=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify(project));dirty=false;$('#save-status').textContent='Uloženo v prohlížeči';toast('Projekt je uložen v tomto prohlížeči.');}catch{toast('Projekt se nepodařilo uložit. Zkontrolujte dostupné místo v prohlížeči.');}});
+$('#preview-btn').addEventListener('click',()=>{preview=!preview;document.body.classList.toggle('previewing',preview);$('#preview-btn').innerHTML=preview?'<span>✎</span> Zpět do editoru':'<span>▷</span> Náhled';$('.workspace-note span:last-child').textContent=preview?'Režim náhledu':'Režim úprav';renderAll();});
+$('#export-btn').addEventListener('click',()=>{activeFile='index.html';updateExport();$('#export-modal').classList.remove('hidden');});
+$$('[data-close]').forEach(b=>b.addEventListener('click',()=>$('#'+b.dataset.close).classList.add('hidden')));
+$('#export-modal').addEventListener('click',e=>{if(e.target.id==='export-modal') e.currentTarget.classList.add('hidden');});
+$$('[data-file]').forEach(b=>b.addEventListener('click',()=>{activeFile=b.dataset.file;updateExport();}));
+$('#download-code').addEventListener('click',()=>download(activeFile,generated[activeFile]));
+$('#copy-code').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(generated[activeFile]);toast('Obsah souboru zkopírován.');}catch{const area=document.createElement('textarea');area.value=generated[activeFile];document.body.appendChild(area);area.select();document.execCommand('copy');area.remove();toast('Obsah souboru zkopírován.');}});
+$('#properties').addEventListener('change',event=>{
+  const input=event.target, el=current();
+  if(input.dataset.scope==='page') { remember(); project.pageHeights[device]=Math.max(200,num(input.value,1000)); renderAll(); return; }
+  if(!el) return;
+  if(input.id==='image-upload' && input.files?.[0]) { const reader=new FileReader();reader.onload=()=>{remember();el.props.src=reader.result;renderAll();};reader.readAsDataURL(input.files[0]);return; }
+  const {key,scope}=input.dataset;if(!key) return; remember();
+  let value=input.type==='checkbox'?input.checked:input.type==='number'?num(input.value):input.value;
+  if (['w','h','fontSize'].includes(key)) value=Math.max(1,value);
+  if (['borderWidth','radius','padding','shadow'].includes(key)) value=Math.max(0,value);
+  if(scope==='element') el[key]=value; else if(scope==='layout') el.layouts[device][key]=value; else if(scope==='action') el.props.action[key]=value; else el.props[key]=value;
+  renderAll();
+});
+$('#properties').addEventListener('click',e=>{const b=e.target.closest('[data-operation]');if(b)operate(b.dataset.operation);});
+
+let drag=null;
+$('#page').addEventListener('pointerdown',event=>{
+  if(preview) return;
+  const node=event.target.closest('.canvas-element');
+  if(!node){selected=null;renderAll();return;}
+  if(node.isContentEditable) return;
+  event.preventDefault(); const el=project.elements.find(item=>item.id===node.id);if(!el)return;
+  selected=el.id; const rect=node.getBoundingClientRect();
+  const resize=event.clientX>rect.right-14 && event.clientY>rect.bottom-14;
+  drag={id:el.id,startX:event.clientX,startY:event.clientY,layout:clone(el.layouts[device]),resize,changed:false};
+  $$('.canvas-element', $('#page')).forEach(item=>item.classList.toggle('selected',item.id===selected));renderLayers();renderProperties();
+  if(window.innerWidth<=700) $('.right-panel').classList.add('mobile-open');
+});
+document.addEventListener('pointermove',event=>{
+  if(!drag)return; const el=project.elements.find(item=>item.id===drag.id);if(!el)return;
+  const dx=Math.round((event.clientX-drag.startX)/zoom),dy=Math.round((event.clientY-drag.startY)/zoom);
+  if(!drag.changed && (Math.abs(dx)>2||Math.abs(dy)>2)){remember();drag.changed=true;}
+  if(!drag.changed)return;
+  const pos=el.layouts[device]; if(drag.resize){pos.w=Math.max(20,drag.layout.w+dx);pos.h=Math.max(20,drag.layout.h+dy);}else{pos.x=drag.layout.x+dx;pos.y=drag.layout.y+dy;}renderCanvas();
+});
+document.addEventListener('pointerup',()=>{if(drag?.changed)renderProperties();drag=null;});
+$('#page').addEventListener('dblclick',event=>{
+  if(preview)return; const node=event.target.closest('.canvas-element'),el=node&&project.elements.find(item=>item.id===node.id);
+  if(!el||!['heading','text','button','link'].includes(el.type))return;
+  remember();node.contentEditable='true';node.focus();const range=document.createRange();range.selectNodeContents(node);const sel=window.getSelection();sel.removeAllRanges();sel.addRange(range);
+  node.addEventListener('blur',()=>{el.text=node.innerText.replace(/\n+$/,'');node.contentEditable='false';renderAll();},{once:true});
+});
+document.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){$('#export-modal').classList.add('hidden');$('.right-panel').classList.remove('mobile-open');return;}
+  const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)||document.activeElement.isContentEditable;
+  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'&&!typing){event.preventDefault();changeHistory(event.shiftKey?'redo':'undo');return;}
+  if(typing||preview||!current())return;
+  if(event.key==='Delete'||event.key==='Backspace'){event.preventDefault();operate('delete');}
+  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='d'){event.preventDefault();operate('duplicate');}
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();remember();const l=current().layouts[device],step=event.shiftKey?10:1;l.x+=(event.key==='ArrowRight'?step:event.key==='ArrowLeft'?-step:0);l.y+=(event.key==='ArrowDown'?step:event.key==='ArrowUp'?-step:0);renderAll();}
+});
+window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
+renderAll();
+try { if(localStorage.getItem(STORAGE_KEY)) $('#save-status').textContent='Uloženo v prohlížeči'; } catch { /* Storage may be disabled by the browser. */ }
