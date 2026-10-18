@@ -114,6 +114,8 @@ function renderPages() {
   $('#pages-list').innerHTML=site.pages.map(page=>`<div class="page-entry ${page.id===project.id?'active':''}"><button class="page-select" data-page-select="${esc(page.id)}"><span class="page-entry-icon">▧</span><span><strong>${esc(page.title)}</strong><small>${esc(pageFilename(page))}</small></span></button>${page.id===project.id?`<div class="page-entry-details"><label>Název stránky<input data-page-title="${esc(page.id)}" value="${esc(page.title)}" maxlength="80"></label>${site.pages.length>1?`<button class="page-delete" data-page-delete="${esc(page.id)}">× &nbsp; Smazat stránku</button>`:''}</div>`:''}</div>`).join('');
 }
 function current() { return project.elements.find(item => item.id === selected); }
+// Images keep their current proportions by default; existing projects do not need migrating.
+function aspectLocked(el) { return el.props.aspectLocked ?? el.type === 'image'; }
 function animationFor(el) {
   const value = {...ANIMATION_DEFAULT,...el.props.animation};
   if (!ANIMATION_PRESETS.some(([preset])=>preset===value.preset)) value.preset='none';
@@ -207,7 +209,7 @@ function renderProperties() {
   if (el.type === 'image') content += field('Adresa obrázku','src',p.src) + field('Alternativní text','alt',p.alt) + '<label class="field"><span>Nebo nahrát obrázek do projektu</span><input id="image-upload" type="file" accept="image/*"></label><p class="hint">Nahraný obrázek se vloží přímo do exportovaného HTML.</p>';
   if (el.type === 'input') content += field('Zástupný text','placeholder',p.placeholder) + field('Název pole pro odeslání','fieldName',p.fieldName || 'zprava') + field('Typ pole','inputType',p.inputType || 'text',{type:'select',options:[['text','Text'],['email','E-mail'],['tel','Telefon'],['number','Číslo']]}) + field('Připojit k formuláři','formTarget',p.formTarget || '',{type:'select',options:[['','Bez formuláře'],...project.elements.filter(item=>item.type==='form').map(item=>[item.id,item.name])]}) + field('Povinné pole','required',p.required,{type:'checkbox'});
   if (el.type === 'form') content += field('Popisek prvního pole','formNameLabel',p.formNameLabel || 'Jméno') + field('Popisek e-mailu','formEmailLabel',p.formEmailLabel || 'E-mail') + field('Text tlačítka','formButton',p.formButton || 'Odeslat') + field('Adresa pro odeslání (URL)','formAction',p.formAction) + '<div class="notice">Povinná pole se ověřují v prohlížeči. Pro skutečné doručení zadejte adresu serveru nebo externí služby; bez ní se formulář neodešle. Další pole připojíte v jeho vlastnostech.</div>';
-  let geometry = `<p class="hint">Rozměry a pozice platí pro: <strong>${DEVICE_LABELS[device]}</strong>.</p><div class="property-grid">${field('Pozice X','x',pos.x,{type:'number',scope:'layout'})}${field('Pozice Y','y',pos.y,{type:'number',scope:'layout'})}${field('Šířka','w',pos.w,{type:'number',scope:'layout'})}${field('Výška','h',pos.h,{type:'number',scope:'layout'})}</div>`;
+  let geometry = `<p class="hint">Rozměry a pozice platí pro: <strong>${DEVICE_LABELS[device]}</strong>.</p><div class="property-grid">${field('Pozice X','x',pos.x,{type:'number',scope:'layout'})}${field('Pozice Y','y',pos.y,{type:'number',scope:'layout'})}${field('Šířka','w',pos.w,{type:'number',scope:'layout'})}${field('Výška','h',pos.h,{type:'number',scope:'layout'})}</div><label class="aspect-lock"><input type="checkbox" data-key="aspectLocked" data-scope="props" ${aspectLocked(el)?'checked':''}><span><strong>Zachovat poměr stran</strong><small>Šířka a výška se mění společně</small></span><span class="aspect-lock-icon" aria-hidden="true">${aspectLocked(el)?'🔒':'🔓'}</span></label>`;
   if (['heading','text','button','link','input','form'].includes(el.type)) geometry += field('Velikost písma','fontSize',pos.fontSize,{type:'number',scope:'layout'});
   let typography = field('Písmo','fontFamily',p.fontFamily,{type:'select',options:[['Arial','Arial'],['Georgia','Georgia'],['Verdana','Verdana'],['Tahoma','Tahoma'],['Trebuchet MS','Trebuchet MS'],['Courier New','Courier New']]}) + field('Řez','fontWeight',p.fontWeight,{type:'select',options:[['400','Běžný'],['700','Tučný']]}) + field('Barva textu','color',p.color,{type:'color'}) + field('Zarovnání','align',p.align,{type:'select',options:[['left','Vlevo'],['center','Na střed'],['right','Vpravo']]});
   let appearance = field('Pozadí (barva nebo transparent)','bg',p.bg,{type:'color'}) + '<div class="property-grid">' + field('Rámeček','borderWidth',p.borderWidth,{type:'number'}) + field('Zaoblení','radius',p.radius,{type:'number'}) + field('Vnitřní mezera','padding',p.padding,{type:'number'}) + field('Vnější mezera','margin',p.margin,{type:'number'}) + field('Stín','shadow',p.shadow,{type:'number'}) + '</div>' + field('Barva rámečku','borderColor',p.borderColor,{type:'color'});
@@ -420,18 +422,52 @@ $('#code-tabs').addEventListener('click',event=>{const b=event.target.closest('[
 $('#download-code').addEventListener('click',()=>download(activeFile,generated[activeFile]));
 $('#download-zip').addEventListener('click',()=>{download('muj-web.zip',zipFiles(generated));toast('ZIP obsahuje všechny stránky, styly a skript.');});
 $('#copy-code').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(generated[activeFile]);toast('Obsah souboru zkopírován.');}catch{const area=document.createElement('textarea');area.value=generated[activeFile];document.body.appendChild(area);area.select();document.execCommand('copy');area.remove();toast('Obsah souboru zkopírován.');}});
-$('#properties').addEventListener('change',event=>{
-  const input=event.target, el=current();
-  if(input.dataset.scope==='page') { remember(); project.pageHeights[device]=Math.max(200,num(input.value,1000)); renderAll(); return; }
-  if(!el) return;
-  if(input.id==='image-upload' && input.files?.[0]) { const reader=new FileReader();reader.onload=()=>{remember();el.props.src=reader.result;renderAll();};reader.readAsDataURL(input.files[0]);return; }
-  const {key,scope}=input.dataset;if(!key) return; remember();
-  let value=input.type==='checkbox'?input.checked:input.type==='number'?num(input.value):input.value;
+function applyProperty(input) {
+  const el=current(), {key,scope}=input.dataset;
+  if(!key || (!el && scope!=='page')) return;
+  // Incomplete numbers or colors stay in the field until they become valid.
+  if(input.type==='number' && (input.value==='' || !Number.isFinite(Number(input.value)))) return;
+  if(input.closest('.color-row') && !CSS.supports('color',input.value)) return;
+  let value=input.type==='checkbox'?input.checked:input.type==='number'?Number(input.value):input.value;
+  if (scope==='page') value=Math.max(200,value);
   if (['w','h','fontSize'].includes(key)) value=Math.max(1,value);
   if (['borderWidth','radius','padding','shadow'].includes(key)) value=Math.max(0,value);
   if (scope==='animation' && key==='duration') value=Math.max(100,Math.min(10000,value));
   if (scope==='animation' && key==='delay') value=Math.max(0,Math.min(30000,value));
-  if(scope==='element') el[key]=value; else if(scope==='layout') el.layouts[device][key]=value; else if(scope==='action') el.props.action[key]=value; else if(scope==='animation') {el.props.animation ||= {...ANIMATION_DEFAULT};el.props.animation[key]=value;} else el.props[key]=value;
+  const target=scope==='page'?project.pageHeights:scope==='element'?el:scope==='layout'?el.layouts[device]:scope==='action'?(el.props.action ||= {type:'none',value:'',target:''}):scope==='animation'?(el.props.animation ||= {...ANIMATION_DEFAULT}):el.props;
+  const targetKey=scope==='page'?device:key;
+  const previous=key==='aspectLocked'?aspectLocked(el):target[targetKey];
+  if(previous===value) return;
+  if(!input._atelierSnapshot) { remember(); input._atelierSnapshot=true; }
+  if(scope==='layout' && (key==='w'||key==='h') && aspectLocked(el)) {
+    // Freeze the ratio for the whole edit, even while the user types a number.
+    const pos=el.layouts[device];
+    input._atelierRatio ||= Math.max(1,num(pos.w,1))/Math.max(1,num(pos.h,1));
+    const other=key==='w'?'h':'w';
+    pos[other]=Math.max(1,Math.round(key==='w'?value/input._atelierRatio:value*input._atelierRatio));
+    const otherInput=$(`[data-scope="layout"][data-key="${other}"]`,$('#properties'));
+    if(otherInput) otherInput.value=pos[other];
+  }
+  target[targetKey]=value;
+  const colorRow=input.closest('.color-row');
+  if(colorRow) {
+    const colorInput=$('input[type="color"]',colorRow), textInput=$('input[type="text"]',colorRow);
+    if(input===colorInput) textInput.value=value;
+    else if(/^#[0-9a-f]{6}$/i.test(value)) colorInput.value=value;
+  }
+  renderCanvas();
+  if(scope==='element' && key==='name') $('#selected-summary strong').textContent=value;
+}
+$('#properties').addEventListener('input',event=>{
+  const input=event.target;
+  if(input.id==='image-upload' || input.type==='checkbox' || input.tagName==='SELECT') return;
+  applyProperty(input);
+});
+$('#properties').addEventListener('change',event=>{
+  const input=event.target, el=current();
+  if(input.id==='image-upload' && el && input.files?.[0]) { const reader=new FileReader();reader.onload=()=>{remember();el.props.src=reader.result;renderAll();};reader.readAsDataURL(input.files[0]);return; }
+  applyProperty(input);
+  // Refresh dependent controls only after editing finishes, keeping focus and the color picker open during input.
   renderAll();
 });
 $('#properties').addEventListener('click',e=>{
@@ -463,7 +499,14 @@ document.addEventListener('pointermove',event=>{
   const dx=Math.round((event.clientX-drag.startX)/zoom),dy=Math.round((event.clientY-drag.startY)/zoom);
   if(!drag.changed && (Math.abs(dx)>2||Math.abs(dy)>2)){remember();drag.changed=true;}
   if(!drag.changed)return;
-  const pos=el.layouts[device]; if(drag.resize){pos.w=Math.max(20,drag.layout.w+dx);pos.h=Math.max(20,drag.layout.h+dy);}else{pos.x=drag.layout.x+dx;pos.y=drag.layout.y+dy;}renderCanvas();
+  const pos=el.layouts[device]; if(drag.resize){
+    if(aspectLocked(el)) {
+      const width=Math.max(1,drag.layout.w), height=Math.max(1,drag.layout.h);
+      const change=Math.abs(dx/width)>=Math.abs(dy/height)?dx/width:dy/height;
+      const scale=Math.max(20/width,20/height,1+change);
+      pos.w=Math.round(width*scale);pos.h=Math.round(height*scale);
+    } else {pos.w=Math.max(20,drag.layout.w+dx);pos.h=Math.max(20,drag.layout.h+dy);}
+  }else{pos.x=drag.layout.x+dx;pos.y=drag.layout.y+dy;}renderCanvas();
 });
 document.addEventListener('pointerup',()=>{if(drag?.changed)renderProperties();drag=null;});
 $('#page').addEventListener('dblclick',event=>{
