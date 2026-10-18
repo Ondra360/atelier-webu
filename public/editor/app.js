@@ -116,6 +116,18 @@ function renderPages() {
 function current() { return project.elements.find(item => item.id === selected); }
 // Images keep their current proportions by default; existing projects do not need migrating.
 function aspectLocked(el) { return el.props.aspectLocked ?? el.type === 'image'; }
+// Older projects have one action; do not rewrite them until the user edits it.
+function actionsFor(el) {
+  if (Array.isArray(el.props.actions)) return el.props.actions;
+  return el.props.action?.type && el.props.action.type !== 'none' ? [el.props.action] : [];
+}
+function editableActions(el) {
+  if (!Array.isArray(el.props.actions)) {
+    el.props.actions=actionsFor(el).map(action=>({...action}));
+    delete el.props.action;
+  }
+  return el.props.actions;
+}
 function animationFor(el) {
   const value = {...ANIMATION_DEFAULT,...el.props.animation};
   if (!ANIMATION_PRESETS.some(([preset])=>preset===value.preset)) value.preset='none';
@@ -138,11 +150,13 @@ function elementInner(el) {
 }
 function elementTag(el) { return el.type === 'button' ? 'button' : el.type === 'link' ? 'a' : el.type === 'heading' ? 'h1' : el.type === 'section' ? 'section' : 'div'; }
 function elementMarkup(el, z, editing, exporting = false) {
-  const tag = elementTag(el), p = el.props, clickable = p.action?.type && p.action.type !== 'none';
+  const tag = elementTag(el), p = el.props;
   const animation=animationFor(el), animationAttrs=animation.preset==='none'?'':` data-animation="${animation.preset}" data-animation-trigger="${animation.trigger}"`;
-  const targetPage = p.action?.type==='page' ? site.pages.find(page=>page.id===p.action.target) : null;
-  const actionData = exporting && p.action?.type==='page' ? {...p.action,value:targetPage ? pageFilename(targetPage) : ''} : p.action;
-  const action = clickable ? ` data-action="${esc(JSON.stringify(actionData))}"` : '';
+  const actionData=actionsFor(el).filter(item=>item?.type && item.type!=='none').map(item=>{
+    const targetPage = exporting && item.type==='page' ? site.pages.find(page=>page.id===item.target) : null;
+    return exporting && item.type==='page' ? {...item,value:targetPage ? pageFilename(targetPage) : ''} : item;
+  });
+  const action = actionData.length ? ` data-action="${esc(JSON.stringify(actionData))}"` : '';
   const attrs = tag === 'button' ? ' type="button"' : tag === 'a' ? ' href="#"' : '';
   return `<${tag} id="${esc(el.id)}" class="canvas-element${editing && selected === el.id ? ' selected' : ''}"${attrs}${action}${animationAttrs} style="${esc(cssForElement(el,el.layouts[device],z))}">${elementInner(el)}</${tag}>`;
 }
@@ -169,11 +183,12 @@ function renderLayers() {
 }
 function field(label, key, value, options = {}) {
   const type = options.type || 'text', scope = options.scope || 'props';
-  if (type === 'select') return `<label class="field"><span>${label}</span><select data-key="${key}" data-scope="${scope}">${options.options.map(([v,n]) => `<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
-  if (type === 'textarea') return `<label class="field"><span>${label}</span><textarea data-key="${key}" data-scope="${scope}">${esc(value)}</textarea></label>`;
-  if (type === 'color') return `<label class="field"><span>${label}</span><div class="color-row"><input type="color" data-key="${key}" data-scope="${scope}" value="${/^#[0-9a-f]{6}$/i.test(value)?value:'#ffffff'}"><input type="text" data-key="${key}" data-scope="${scope}" value="${esc(value)}" aria-label="${label} hodnota"></div></label>`;
-  if (type === 'checkbox') return `<label class="field"><input type="checkbox" data-key="${key}" data-scope="${scope}" ${value?'checked':''}> ${label}</label>`;
-  return `<label class="field"><span>${label}</span>${type==='number'?`<div class="input-wrap"><input type="number" data-key="${key}" data-scope="${scope}" value="${esc(value)}"><span>${esc(options.unit || 'px')}</span></div>`:`<input type="${type}" data-key="${key}" data-scope="${scope}" value="${esc(value)}">`}</label>`;
+  const data=`data-key="${key}" data-scope="${scope}"${Number.isInteger(options.actionIndex)?` data-action-index="${options.actionIndex}"`:''}`;
+  if (type === 'select') return `<label class="field"><span>${label}</span><select ${data}>${options.options.map(([v,n]) => `<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
+  if (type === 'textarea') return `<label class="field"><span>${label}</span><textarea ${data}>${esc(value)}</textarea></label>`;
+  if (type === 'color') return `<label class="field"><span>${label}</span><div class="color-row"><input type="color" ${data} value="${/^#[0-9a-f]{6}$/i.test(value)?value:'#ffffff'}"><input type="text" ${data} value="${esc(value)}" aria-label="${label} hodnota"></div></label>`;
+  if (type === 'checkbox') return `<label class="field"><input type="checkbox" ${data} ${value?'checked':''}> ${label}</label>`;
+  return `<label class="field"><span>${label}</span>${type==='number'?`<div class="input-wrap"><input type="number" ${data} value="${esc(value)}"><span>${esc(options.unit || 'px')}</span></div>`:`<input type="${type}" ${data} value="${esc(value)}">`}</label>`;
 }
 const section = (title, content) => `<div class="property-section"><div class="section-title"><strong>${title}</strong><span>⌃</span></div>${content}</div>`;
 function renderProperties() {
@@ -193,14 +208,19 @@ function renderProperties() {
     box.innerHTML=section('Animace prvku',html); return;
   }
   if (propTab === 'action') {
-    const a = p.action || {type:'none',value:'',target:''};
+    const actions=actionsFor(el);
     const choices = [['none','Žádná akce'],['page','Otevřít stránku webu'],['link','Otevřít externí odkaz'],['scroll','Posunout na prvek'],['toggle','Zobrazit / skrýt prvek'],['text','Změnit text prvku'],['alert','Zobrazit upozornění'],['submit','Odeslat formulář']];
-    const targets = project.elements.filter(item => item.id !== el.id && (a.type !== 'submit' || item.type === 'form') && (a.type !== 'text' || ['heading','text','button','link'].includes(item.type))).map(item => [item.id, item.name]);
-    let html = field('Po kliknutí', 'type', a.type, {type:'select',scope:'action',options:choices});
-    if (a.type === 'page') html += field('Cílová stránka','target',a.target,{type:'select',scope:'action',options:[['','Vyberte stránku'],...site.pages.map(page=>[page.id,page.title])]});
-    if (['scroll','toggle','text','submit'].includes(a.type)) html += field('Cílový prvek','target',a.target,{type:'select',scope:'action',options:[['','Vyberte prvek'],...targets]});
-    if (['link','alert','text'].includes(a.type)) html += field(a.type === 'link' ? 'Adresa odkazu' : a.type === 'alert' ? 'Text upozornění' : 'Nový text','value',a.value,{scope:'action',type:'textarea'});
-    html += '<p class="hint">Akce funguje v náhledu i v exportované stránce. Pro změnu cíle vyberte jiný prvek.</p>';
+    let html=actions.length ? '<p class="hint">Akce se provedou shora dolů, ve zvoleném pořadí.</p>' : '<p class="hint">Zatím tu není žádná akce. Přidejte, co se má stát po kliknutí.</p>';
+    html+=actions.map((a,index)=>{
+      const actionOptions={scope:'action',actionIndex:index};
+      const targets = project.elements.filter(item => (item.id !== el.id || a.type === 'text') && (a.type !== 'submit' || item.type === 'form') && (a.type !== 'text' || ['heading','text','button','link'].includes(item.type))).map(item => [item.id, item.name+(item.id===el.id?' (tento prvek)':'')]);
+      let fields=field('Co se má stát', 'type', a.type, {...actionOptions,type:'select',options:choices});
+      if (a.type === 'page') fields += field('Cílová stránka','target',a.target,{...actionOptions,type:'select',options:[['','Vyberte stránku'],...site.pages.map(page=>[page.id,page.title])]});
+      if (['scroll','toggle','text','submit'].includes(a.type)) fields += field('Cílový prvek','target',a.target,{...actionOptions,type:'select',options:[['','Vyberte prvek'],...targets]});
+      if (['link','alert','text'].includes(a.type)) fields += field(a.type === 'link' ? 'Adresa odkazu' : a.type === 'alert' ? 'Text upozornění' : 'Nový text','value',a.value,{...actionOptions,type:'textarea'});
+      return `<div class="action-card"><div class="action-card-header"><strong>Akce ${index+1}</strong><div class="action-card-buttons"><button type="button" data-action-op="up" data-index="${index}" aria-label="Posunout akci ${index+1} nahoru" title="Posunout nahoru" ${index===0?'disabled':''}>↑</button><button type="button" data-action-op="down" data-index="${index}" aria-label="Posunout akci ${index+1} dolů" title="Posunout dolů" ${index===actions.length-1?'disabled':''}>↓</button><button type="button" data-action-op="remove" data-index="${index}" aria-label="Odebrat akci ${index+1}" title="Odebrat akci">×</button></div></div>${fields}</div>`;
+    }).join('');
+    html += `<button type="button" class="small-btn add-action" data-action-op="add">＋ &nbsp; ${actions.length?'Přidat další akci':'Přidat akci'}</button><p class="hint">Akce fungují v náhledu i v exportu. Přechod na jinou stránku nebo odeslání formuláře může zbývající akce přerušit, proto je zařaďte nakonec.</p>`;
     if (el.type === 'form') html += `<div class="notice">Formulář kontroluje povinná pole. Skutečné odeslání vyžaduje adresu serveru nebo formulářové služby v záložce Vzhled.</div>`;
     box.innerHTML = section('Chování prvku',html); return;
   }
@@ -239,24 +259,30 @@ function mountActions(root) {
   root.addEventListener('click', event => {
     if (root.classList && root.classList.contains('editing')) return;
     const source = event.target.closest('[data-action]'); if (!source || !root.contains(source)) return;
-    let action; try { action=JSON.parse(source.dataset.action); } catch { return; }
+    let stored; try { stored=JSON.parse(source.dataset.action); } catch { return; }
+    const actions=Array.isArray(stored)?stored:[stored];
     event.preventDefault();
-    const target = action.target ? root.querySelector('#' + CSS.escape(action.target)) : null;
-    if (action.type==='page') {
-      const navigation = new CustomEvent('atelier:navigate',{detail:action.target,cancelable:true});
-      root.dispatchEvent(navigation);
-      if (!navigation.defaultPrevented && action.value) window.location.href=action.value;
+    for (const action of actions) {
+      if (!action || typeof action!=='object') continue;
+      const target = action.target ? root.querySelector('#' + CSS.escape(action.target)) : null;
+      if (action.type==='page') {
+        const navigation = new CustomEvent('atelier:navigate',{detail:action.target,cancelable:true});
+        root.dispatchEvent(navigation);
+        if (!navigation.defaultPrevented && action.value) window.location.href=action.value;
+        // A page change ends this sequence in both preview and export.
+        break;
+      }
+      if (action.type==='link' && action.value) {
+        const url=action.value.trim();
+        try { const parsed=new URL(url,document.baseURI); if (!['http:','https:','mailto:','tel:','file:'].includes(parsed.protocol)) throw Error('unsupported protocol'); window.open(url, '_blank', 'noopener'); }
+        catch { alert('Zadejte platnou adresu, například https://example.com nebo dalsi-stranka.html.'); }
+      }
+      if (action.type==='scroll' && target) target.scrollIntoView({behavior:'smooth',block:'start'});
+      if (action.type==='toggle' && target) target.hidden = !target.hidden;
+      if (action.type==='text' && target) target.textContent = action.value || '';
+      if (action.type==='alert') alert(action.value || 'Upozornění');
+      if (action.type==='submit' && target) { const form=target.matches('form') ? target : target.querySelector('form'); if (form) form.requestSubmit(); }
     }
-    if (action.type==='link' && action.value) {
-      const url=action.value.trim();
-      try { const parsed=new URL(url,document.baseURI); if (!['http:','https:','mailto:','tel:','file:'].includes(parsed.protocol)) throw Error('unsupported protocol'); window.open(url, '_blank', 'noopener'); }
-      catch { alert('Zadejte platnou adresu, například https://example.com nebo dalsi-stranka.html.'); }
-    }
-    if (action.type==='scroll' && target) target.scrollIntoView({behavior:'smooth',block:'start'});
-    if (action.type==='toggle' && target) target.hidden = !target.hidden;
-    if (action.type==='text' && target) target.textContent = action.value || '';
-    if (action.type==='alert') alert(action.value || 'Upozornění');
-    if (action.type==='submit' && target) { const form=target.matches('form') ? target : target.querySelector('form'); if (form) form.requestSubmit(); }
   });
   root.addEventListener('submit', event => {
     if (root.classList && root.classList.contains('editing')) { event.preventDefault(); return; }
@@ -395,7 +421,7 @@ $('#pages-list').addEventListener('click',event=>{
   const select=event.target.closest('[data-page-select]'); if(select){switchPage(select.dataset.pageSelect);return;}
   const remove=event.target.closest('[data-page-delete]'); if(!remove || site.pages.length<2)return;
   const page=site.pages.find(item=>item.id===remove.dataset.pageDelete);if(!page || !confirm(`Smazat stránku „${page.title}“ a její prvky?`))return;
-  remember();site.pages=site.pages.filter(item=>item.id!==page.id);site.pages.forEach(item=>item.elements.forEach(el=>{if(el.props.action?.type==='page'&&el.props.action.target===page.id)el.props.action.target='';}));switchPage(site.pages[0].id);toast('Stránka byla smazána.');
+  remember();site.pages=site.pages.filter(item=>item.id!==page.id);site.pages.forEach(item=>item.elements.forEach(el=>actionsFor(el).forEach(action=>{if(action.type==='page'&&action.target===page.id)action.target='';})));switchPage(site.pages[0].id);toast('Stránka byla smazána.');
 });
 $('#pages-list').addEventListener('change',event=>{const id=event.target.dataset.pageTitle;if(!id)return;const page=site.pages.find(item=>item.id===id);if(!page)return;const title=event.target.value.trim()||'Stránka';if(title!==page.title){remember();page.title=title;}renderAll();});
 function applyTheme(dark) {document.body.classList.toggle('dark',dark);$('#theme-btn').setAttribute('aria-pressed',String(dark));$('#theme-btn').title=dark?'Přepnout světlý režim':'Přepnout tmavý režim';$('#theme-btn').setAttribute('aria-label',$('#theme-btn').title);$('#theme-btn').innerHTML=dark?'<span>☼</span> <b>Světlý režim</b>':'<span>☾</span> <b>Tmavý režim</b>';}
@@ -434,11 +460,17 @@ function applyProperty(input) {
   if (['borderWidth','radius','padding','shadow'].includes(key)) value=Math.max(0,value);
   if (scope==='animation' && key==='duration') value=Math.max(100,Math.min(10000,value));
   if (scope==='animation' && key==='delay') value=Math.max(0,Math.min(30000,value));
-  const target=scope==='page'?project.pageHeights:scope==='element'?el:scope==='layout'?el.layouts[device]:scope==='action'?(el.props.action ||= {type:'none',value:'',target:''}):scope==='animation'?(el.props.animation ||= {...ANIMATION_DEFAULT}):el.props;
+  const actionIndex=Number(input.dataset.actionIndex);
+  if(scope==='action' && (!Number.isInteger(actionIndex) || !actionsFor(el)[actionIndex])) return;
+  let target=scope==='page'?project.pageHeights:scope==='element'?el:scope==='layout'?el.layouts[device]:scope==='action'?actionsFor(el)[actionIndex]:scope==='animation'?(el.props.animation ||= {...ANIMATION_DEFAULT}):el.props;
   const targetKey=scope==='page'?device:key;
   const previous=key==='aspectLocked'?aspectLocked(el):target[targetKey];
   if(previous===value) return;
   if(!input._atelierSnapshot) { remember(); input._atelierSnapshot=true; }
+  if(scope==='action') {
+    target=editableActions(el)[actionIndex];
+    if(key==='type') { target.value='';target.target=''; }
+  }
   if(scope==='layout' && (key==='w'||key==='h') && aspectLocked(el)) {
     // Freeze the ratio for the whole edit, even while the user types a number.
     const pos=el.layouts[device];
@@ -471,6 +503,19 @@ $('#properties').addEventListener('change',event=>{
   renderAll();
 });
 $('#properties').addEventListener('click',e=>{
+  const actionButton=e.target.closest('[data-action-op]');
+  if(actionButton) {
+    const el=current();if(!el)return;
+    const op=actionButton.dataset.actionOp, index=Number(actionButton.dataset.index), existing=actionsFor(el);
+    if(op!=='add' && (!Number.isInteger(index) || index<0 || index>=existing.length))return;
+    if((op==='up' && index===0) || (op==='down' && index===existing.length-1))return;
+    remember();const actions=editableActions(el);
+    if(op==='add') actions.push({type:'none',value:'',target:''});
+    if(op==='remove') actions.splice(index,1);
+    if(op==='up') [actions[index-1],actions[index]]=[actions[index],actions[index-1]];
+    if(op==='down') [actions[index],actions[index+1]]=[actions[index+1],actions[index]];
+    renderAll();return;
+  }
   const b=e.target.closest('[data-operation]');if(b){operate(b.dataset.operation);return;}
   if(!e.target.closest('[data-preview-animation]'))return;
   const el=current(),node=el&&document.getElementById(el.id);if(!node)return;
