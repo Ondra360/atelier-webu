@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ateliér — váš prostor pro tvorbu webu</title>
   <meta name="description" content="Vizuální editor webových stránek s exportem zdrojového kódu.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="editor-extras.css?v=multi-actions-1">
+  <link rel="stylesheet" href="editor-extras.css?v=browser-storage-1">
 </head>
 <body>
   <div id="app">
@@ -18,7 +19,7 @@
         <button class="btn btn-ghost" id="redo-btn" title="Znovu (Ctrl+Shift+Z)"><span class="icon">↷</span></button>
         <span class="divider"></span>
         <button class="btn btn-light theme-toggle" id="theme-btn" title="Přepnout tmavý režim" aria-label="Přepnout tmavý režim" aria-pressed="false"><span>☾</span> <b>Tmavý režim</b></button>
-        <div class="account-menu"><button class="btn btn-light account-toggle" id="account-btn" aria-expanded="false" aria-controls="account-panel"><span>◉</span> <b>Účet</b></button><div class="account-panel hidden" id="account-panel"><strong id="account-title">Kontroluji účet…</strong><p id="account-description">Online ukládání vašich stránek.</p><button class="small-btn hidden" id="cloud-load">Načíst projekt z účtu</button><a class="account-link hidden" id="sign-in" href="/signin-with-chatgpt?return_to=%2Feditor%2Findex.html" target="_top">Přihlásit se přes ChatGPT</a><a class="account-link hidden" id="sign-out" href="/signout-with-chatgpt?return_to=%2Feditor%2Findex.html" target="_top">Odhlásit se</a></div></div>
+        <div class="account-menu"><button class="btn btn-light account-toggle" id="account-btn" aria-expanded="false" aria-controls="account-panel"><span>◉</span> <b>Úložiště</b></button><div class="account-panel hidden" id="account-panel"><strong id="account-title">Ukládání v prohlížeči</strong><p id="account-description">Projekty se ukládají v tomto prohlížeči.</p></div></div>
         <button class="btn btn-light" id="save-btn"><span>▣</span> Uložit projekt</button>
         <button class="btn btn-light" id="preview-btn"><span>▷</span> Náhled</button>
         <button class="btn btn-primary" id="export-btn"><span>↗</span> Exportovat kód</button>
@@ -68,8 +69,7 @@
     </div>
   </div>
   <div class="modal hidden" id="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-title"><div class="modal-card"><div class="modal-header"><div><span class="eyebrow">PŘIPRAVENO K POUŽITÍ</span><h2 id="export-title">Váš web, váš kód.</h2><p>Uložte všechny soubory do jedné složky a otevřete index.html.</p></div><button class="close-modal" data-close="export-modal" aria-label="Zavřít">×</button></div><div class="code-tabs" id="code-tabs"></div><pre><code id="export-code"></code></pre><div class="modal-footer"><span>↗ &nbsp; Obrázky z URL vyžadují připojení k internetu.</span><div><button class="btn btn-light" id="copy-code">Kopírovat</button><button class="btn btn-light" id="download-code">↓ &nbsp; Stáhnout soubor</button><button class="btn btn-primary" id="download-zip">↓ &nbsp; Stáhnout ZIP</button></div></div></div></div>
-  <div class="modal hidden" id="cloud-conflict" role="dialog" aria-modal="true" aria-labelledby="cloud-conflict-title"><div class="modal-card cloud-conflict-card"><div class="modal-header"><div><span class="eyebrow">VÁŠ PROJEKT</span><h2 id="cloud-conflict-title">Kterou verzi otevřít?</h2><p id="cloud-conflict-message">V prohlížeči i na účtu je jiná verze projektu. Vyberte, kterou chcete používat.</p></div></div><div class="cloud-conflict-copy">Místní verzi před načtením z účtu zkusíme uložit jako zálohu v tomto prohlížeči. Když zvolíte místní verzi, na účet se přepíše až po stisknutí Uložit projekt.</div><div class="modal-footer"><button class="btn btn-light" id="cloud-use-local">Použít místní verzi</button><button class="btn btn-primary" id="cloud-use-online">Načíst verzi z účtu</button></div></div></div>
   <div class="toast hidden" id="toast" role="status"></div>
-  <script src="app.js?v=multi-actions-1"></script>
+  <script src="app.js?v=browser-storage-1"></script>
 </body>
 </html>
