@@ -6,7 +6,7 @@
   <title>Ateliér — váš prostor pro tvorbu webu</title>
   <meta name="description" content="Vizuální editor webových stránek s exportem zdrojového kódu.">
   <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="editor-extras.css?v=multi-actions-1">
+  <link rel="stylesheet" href="editor-extras.css?v=code-1">
 </head>
 <body>
   <div id="app">
@@ -30,6 +30,7 @@
         <p class="panel-intro">Vše, co potřebujete k vytvoření stránky.</p>
         <div class="sidebar-tabs"><button class="active" data-left-tab="elements">Prvky</button><button data-left-tab="layers">Vrstvy <span id="layer-count"></span></button><button data-left-tab="pages">Stránky <span id="page-count"></span></button></div>
         <div id="elements-pane" class="left-scroll">
+          <div class="code-entry"><button class="small-btn" id="code-new" type="button">&lt;/&gt; Vložit kód</button><button class="small-btn" id="code-template" type="button">✧ Šablona únikovky</button><p>Vlastní HTML, CSS a JavaScript jako nová upravitelná stránka.</p><button class="code-download-link" id="code-template-download" type="button">Stáhnout šablonu HTML</button></div>
           <div class="library-label">ZÁKLADNÍ PRVKY <span>01</span></div>
           <div class="element-grid">
             <button class="element-card" draggable="true" data-add="heading"><span class="element-icon serif-icon">T<span>t</span></span><strong>Nadpis</strong><small>Výrazný text</small></button>
@@ -69,7 +70,26 @@
   </div>
   <div class="modal hidden" id="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-title"><div class="modal-card"><div class="modal-header"><div><span class="eyebrow">PŘIPRAVENO K POUŽITÍ</span><h2 id="export-title">Váš web, váš kód.</h2><p>Uložte všechny soubory do jedné složky a otevřete index.html.</p></div><button class="close-modal" data-close="export-modal" aria-label="Zavřít">×</button></div><div class="code-tabs" id="code-tabs"></div><pre><code id="export-code"></code></pre><div class="modal-footer"><span>↗ &nbsp; Obrázky z URL vyžadují připojení k internetu.</span><div><button class="btn btn-light" id="copy-code">Kopírovat</button><button class="btn btn-light" id="download-code">↓ &nbsp; Stáhnout soubor</button><button class="btn btn-primary" id="download-zip">↓ &nbsp; Stáhnout ZIP</button></div></div></div></div>
   <div class="modal hidden" id="cloud-conflict" role="dialog" aria-modal="true" aria-labelledby="cloud-conflict-title"><div class="modal-card cloud-conflict-card"><div class="modal-header"><div><span class="eyebrow">VÁŠ PROJEKT</span><h2 id="cloud-conflict-title">Kterou verzi otevřít?</h2><p id="cloud-conflict-message">V prohlížeči i na účtu je jiná verze projektu. Vyberte, kterou chcete používat.</p></div></div><div class="cloud-conflict-copy">Místní verzi před načtením z účtu zkusíme uložit jako zálohu v tomto prohlížeči. Když zvolíte místní verzi, na účet se přepíše až po stisknutí Uložit projekt.</div><div class="modal-footer"><button class="btn btn-light" id="cloud-use-local">Použít místní verzi</button><button class="btn btn-primary" id="cloud-use-online">Načíst verzi z účtu</button></div></div></div>
+
+  <dialog id="code-editor-dialog" class="source-dialog" aria-labelledby="code-dialog-title">
+    <div class="source-header"><div><span class="eyebrow">VLASTNÍ STRÁNKA</span><h2 id="code-dialog-title">Vložit vlastní kód</h2></div><button id="code-close" class="close-modal" aria-label="Zavřít editor kódu" type="button">×</button></div>
+    <div class="source-settings"><label>Název stránky<input id="source-title" maxlength="80"></label><label class="source-upload">Načíst HTML soubor<input id="code-import" type="file" accept=".html,.htm,text/html"></label></div>
+    <p id="code-import-message" class="source-message" role="status"></p>
+    <div class="source-workbench">
+      <section class="source-inputs" aria-label="Zdrojový kód">
+        <div class="source-tabs" role="tablist" aria-label="Jazyk kódu"><button type="button" role="tab" id="source-tab-html" data-source-tab="html" aria-controls="source-panel-html" aria-selected="true">HTML</button><button type="button" role="tab" id="source-tab-css" data-source-tab="css" aria-controls="source-panel-css" aria-selected="false" tabindex="-1">CSS</button><button type="button" role="tab" id="source-tab-js" data-source-tab="js" aria-controls="source-panel-js" aria-selected="false" tabindex="-1">JavaScript</button></div>
+        <div id="source-panel-html" role="tabpanel" aria-labelledby="source-tab-html"><textarea id="source-html" aria-label="HTML kód" spellcheck="false" autocapitalize="off"></textarea></div>
+        <div id="source-panel-css" role="tabpanel" aria-labelledby="source-tab-css" hidden><textarea id="source-css" aria-label="CSS kód" spellcheck="false" autocapitalize="off"></textarea></div>
+        <div id="source-panel-js" role="tabpanel" aria-labelledby="source-tab-js" hidden><textarea id="source-js" aria-label="JavaScript kód" spellcheck="false" autocapitalize="off"></textarea></div>
+      </section>
+      <section class="source-preview"><div class="source-preview-heading"><strong>Náhled stránky</strong><button type="button" class="small-btn" id="code-run">▷ Spustit náhled</button></div><iframe id="code-preview-frame" title="Náhled vlastního kódu" sandbox="allow-scripts allow-forms" src="about:blank"></iframe><p id="code-preview-label"></p></section>
+    </div>
+    <div class="source-footer"><p>Kód zůstane upravitelný. HTML stránku lze samostatně stáhnout i zahrnout do exportu webu.</p><button type="button" class="btn btn-primary" id="code-apply">Přidat jako novou stránku</button></div>
+  </dialog>
+
   <div class="toast hidden" id="toast" role="status"></div>
-  <script src="app.js?v=multi-actions-1"></script>
+  <script src="escape-template.js?v=code-1"></script>
+  <script src="code-editor.js?v=code-1"></script>
+  <script src="app.js?v=code-1"></script>
 </body>
 </html>

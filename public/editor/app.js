@@ -173,6 +173,7 @@ function renderCanvas() {
   const page = $('#page');
   if (page._atelierAnimationObserver) page._atelierAnimationObserver.disconnect();
   page.classList.toggle('editing', !preview);
+  if (project.customCode) { renderCodeCanvas(page); return; }
   page.innerHTML = project.elements.map((el,index) => elementMarkup(el,index+1,!preview)).join('');
   fitCanvas(); renderLayers();
   if (preview) startAnimations(page);
@@ -193,6 +194,7 @@ function field(label, key, value, options = {}) {
 const section = (title, content) => `<div class="property-section"><div class="section-title"><strong>${title}</strong><span>⌃</span></div>${content}</div>`;
 function renderProperties() {
   const el = current(), summary = $('#selected-summary'), box = $('#properties');
+  if (project.customCode) { renderCodeProperties(summary,box); return; }
   if (!el) { summary.innerHTML = '<div class="selected-icon">✧</div><div><strong>Stránka</strong><small>Vyberte prvek na ploše</small></div><span>⌄</span>'; box.innerHTML = section('Nastavení stránky',field('Výška stránky · '+DEVICE_LABELS[device], 'height', project.pageHeights[device], {type:'number',scope:'page'})+'<p class="hint">Výšku stránky i umístění prvků můžete nastavit zvlášť pro počítač, tablet a mobil.</p>') + '<div class="empty-properties">Kliknutím na prvek upravíte jeho obsah, vzhled i chování.</div>'; return; }
   const p = el.props, pos = el.layouts[device];
   summary.innerHTML = `<div class="selected-icon">${typeIcons[el.type]}</div><div><strong>${esc(el.name)}</strong><small>${typeNames[el.type]} · ${DEVICE_LABELS[device]}</small></div><span>⌄</span>`;
@@ -238,6 +240,7 @@ function renderProperties() {
 function renderAll() { renderPages(); renderCanvas(); renderProperties(); }
 
 function addElement(type, x, y) {
+  if(project.customCode){toast('Tuto stránku upravíte tlačítkem Upravit kód stránky. Pro vizuální prvky přidejte novou stránku.');return;}
   remember(); const scale = WIDTHS[device] / 1200;
   const el = makeElement(type, x === undefined ? 100 : x/scale, y === undefined ? 100 : y);
   if (x !== undefined) { el.layouts[device].x = Math.round(x); el.layouts[device].y = Math.round(y); }
@@ -316,6 +319,7 @@ function exportFiles() {
   const originalDevice=device; device='desktop';
   const files={};
   site.pages.forEach(page=>{
+    if(page.customCode){files[pageFilename(page)]=composeCodeDocument(page.customCode);return;}
     const elements=page.elements.map((el,index)=>elementMarkup(el,index+1,false,true).replace(/ style="[^"]*"(?=>)/,'')).join('\n    ');
     files[pageFilename(page)]=`<!doctype html>\n<html lang="cs">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>${esc(page.title)}</title>\n  <link rel="stylesheet" href="style.css">\n</head>\n<body data-page="${esc(page.id)}">\n  <main class="page">\n    ${elements}\n  </main>\n  <script src="script.js"><\/script>\n</body>\n</html>\n`;
   });
@@ -570,6 +574,7 @@ document.addEventListener('keydown',event=>{
   if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();remember();const l=current().layouts[device],step=event.shiftKey?10:1;l.x+=(event.key==='ArrowRight'?step:event.key==='ArrowLeft'?-step:0);l.y+=(event.key==='ArrowDown'?step:event.key==='ArrowUp'?-step:0);renderAll();}
 });
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
+initializeCodeEditor();
 renderAll();
 try { if(localStorage.getItem(STORAGE_KEY)) $('#save-status').textContent='Uloženo v prohlížeči'; } catch { /* Storage may be disabled by the browser. */ }
 accountDisplay();refreshCloud();
