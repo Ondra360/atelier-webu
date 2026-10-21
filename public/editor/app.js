@@ -58,7 +58,7 @@ function makeElement(type, x = 100, y = 100) {
     const responsiveWidth = width === 1200 ? w : Math.min(width - 40, Math.max(type === 'button' ? 150 : 140, Math.round(w * (width === 375 ? .8 : scale))));
     return { x: Math.max(0,Math.min(Math.round(x * scale),width-responsiveWidth-20)), y, w: responsiveWidth, h, fontSize: Math.max(type === 'heading' ? 28 : 10, Math.round(fontSize * (width === 375 && type === 'heading' ? .72 : 1))) };
   };
-  return { id: uid(), type, name: typeNames[type], text, props: { color, bg, fontFamily: type === 'heading' ? 'Georgia' : 'Arial', fontWeight: '400', borderColor:'#dce2d9', borderWidth: type === 'input' ? 1 : 0, radius: type === 'button' ? 5 : type === 'shape' ? 60 : 0, shadow:0, padding: type === 'button' ? 10 : type === 'form' ? 16 : 0, margin:0, align: type === 'button' ? 'center' : 'left', src: '', alt:'Obrázek', placeholder:'Napište sem…', required:false, fieldName:'zprava', inputType:'text', formTarget:'', formAction:'', formNameLabel:'Jméno', formEmailLabel:'E-mail', formButton:'Odeslat', action:{ type:'none', value:'', target:'' } }, layouts:{ desktop:makeLayout(1200,1), tablet:makeLayout(768,.64), mobile:makeLayout(375,.3125) } };
+  return { id: uid(), type, name: typeNames[type], text, props: { color, bg, fontFamily: type === 'heading' ? 'Georgia' : 'Arial', fontWeight: '400', borderColor:'#dce2d9', borderWidth: type === 'input' ? 1 : 0, radius: type === 'button' ? 5 : type === 'shape' ? 60 : 0, shadow:0, padding: type === 'button' ? 10 : type === 'form' ? 16 : 0, margin:0, align: type === 'button' ? 'center' : 'left', src: '', alt:'Obrázek', placeholder:'Napište sem…', required:false, fieldName:'zprava', inputType:'text', formTarget:'', formAction:'', formNameLabel:'Jméno', formEmailLabel:'E-mail', formButton:'Odeslat', hiddenInitially:false, positionLocked:false, action:{ type:'none', value:'', target:'' } }, layouts:{ desktop:makeLayout(1200,1), tablet:makeLayout(768,.64), mobile:makeLayout(375,.3125) } };
 }
 
 function sampleProject() {
@@ -94,11 +94,15 @@ let site, hadLocalProject = false;
 try { const stored = localStorage.getItem(STORAGE_KEY); hadLocalProject=!!stored; site = asSite(stored ? JSON.parse(stored) : sampleProject()); }
 catch { site = asSite(sampleProject()); }
 let project = site.pages.find(page => page.id === site.activePageId);
-let selected = null, device = 'desktop', propTab = 'design', preview = false, zoom = 1, history = [], future = [], activeFile = 'index.html', generated = {};
+let selected = null, device = 'desktop', propTab = 'design', preview = false, zoom = 1, history = [], future = [], activeFile = 'index.html', generated = {}, codeDraft = null, codeFile = 'index.html';
 let dirty = false;
 let cloud = { status:'loading', account:null, revision:null, pending:null };
 
-function remember() { history.push(JSON.stringify(site)); if (history.length > 60) history.shift(); future = []; dirty = true; $('#save-status').textContent = 'Neuložené změny'; }
+function remember(kind = 'design') {
+  history.push(JSON.stringify(site)); if (history.length > 60) history.shift(); future = [];
+  if (kind === 'design' && site.code?.mode === 'custom') delete site.code;
+  dirty = true; $('#save-status').textContent = 'Neuložené změny';
+}
 function changeHistory(direction) {
   const from = direction === 'undo' ? history : future, to = direction === 'undo' ? future : history;
   if (!from.length) return;
@@ -116,6 +120,7 @@ function renderPages() {
 function current() { return project.elements.find(item => item.id === selected); }
 // Images keep their current proportions by default; existing projects do not need migrating.
 function aspectLocked(el) { return el.props.aspectLocked ?? el.type === 'image'; }
+function positionLocked(el) { return !!el.props.positionLocked; }
 // Older projects have one action; do not rewrite them until the user edits it.
 function actionsFor(el) {
   if (Array.isArray(el.props.actions)) return el.props.actions;
@@ -158,7 +163,9 @@ function elementMarkup(el, z, editing, exporting = false) {
   });
   const action = actionData.length ? ` data-action="${esc(JSON.stringify(actionData))}"` : '';
   const attrs = tag === 'button' ? ' type="button"' : tag === 'a' ? ' href="#"' : '';
-  return `<${tag} id="${esc(el.id)}" class="canvas-element${editing && selected === el.id ? ' selected' : ''}"${attrs}${action}${animationAttrs} style="${esc(cssForElement(el,el.layouts[device],z))}">${elementInner(el)}</${tag}>`;
+  const hidden = p.hiddenInitially && !editing ? ' hidden' : '';
+  const stateClass = `${editing && selected === el.id ? ' selected' : ''}${editing && p.hiddenInitially ? ' initially-hidden' : ''}${editing && positionLocked(el) ? ' position-locked' : ''}`;
+  return `<${tag} id="${esc(el.id)}" class="canvas-element${stateClass}"${attrs}${hidden}${action}${animationAttrs} style="${esc(cssForElement(el,el.layouts[device],z))}">${elementInner(el)}${editing && positionLocked(el) ? '<span class="position-lock-mark" aria-label="Pozice uzamčena">🔒</span>' : ''}</${tag}>`;
 }
 
 function fitCanvas() {
@@ -173,6 +180,11 @@ function renderCanvas() {
   const page = $('#page');
   if (page._atelierAnimationObserver) page._atelierAnimationObserver.disconnect();
   page.classList.toggle('editing', !preview);
+  if (preview && site.code?.mode === 'custom') {
+    page.innerHTML = '<iframe class="code-preview-frame" title="Náhled vlastního kódu" sandbox="allow-scripts allow-forms allow-popups"></iframe>';
+    $('.code-preview-frame', page).srcdoc = codePreviewDocument();
+    fitCanvas(); renderLayers(); return;
+  }
   page.innerHTML = project.elements.map((el,index) => elementMarkup(el,index+1,!preview)).join('');
   fitCanvas(); renderLayers();
   if (preview) startAnimations(page);
@@ -184,11 +196,12 @@ function renderLayers() {
 function field(label, key, value, options = {}) {
   const type = options.type || 'text', scope = options.scope || 'props';
   const data=`data-key="${key}" data-scope="${scope}"${Number.isInteger(options.actionIndex)?` data-action-index="${options.actionIndex}"`:''}`;
-  if (type === 'select') return `<label class="field"><span>${label}</span><select ${data}>${options.options.map(([v,n]) => `<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
-  if (type === 'textarea') return `<label class="field"><span>${label}</span><textarea ${data}>${esc(value)}</textarea></label>`;
-  if (type === 'color') return `<label class="field"><span>${label}</span><div class="color-row"><input type="color" ${data} value="${/^#[0-9a-f]{6}$/i.test(value)?value:'#ffffff'}"><input type="text" ${data} value="${esc(value)}" aria-label="${label} hodnota"></div></label>`;
-  if (type === 'checkbox') return `<label class="field"><input type="checkbox" ${data} ${value?'checked':''}> ${label}</label>`;
-  return `<label class="field"><span>${label}</span>${type==='number'?`<div class="input-wrap"><input type="number" ${data} value="${esc(value)}"><span>${esc(options.unit || 'px')}</span></div>`:`<input type="${type}" ${data} value="${esc(value)}">`}</label>`;
+  const disabled = options.disabled ? ' disabled' : '';
+  if (type === 'select') return `<label class="field"><span>${label}</span><select ${data}${disabled}>${options.options.map(([v,n]) => `<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
+  if (type === 'textarea') return `<label class="field"><span>${label}</span><textarea ${data}${disabled}>${esc(value)}</textarea></label>`;
+  if (type === 'color') return `<label class="field"><span>${label}</span><div class="color-row"><input type="color" ${data}${disabled} value="${/^#[0-9a-f]{6}$/i.test(value)?value:'#ffffff'}"><input type="text" ${data}${disabled} value="${esc(value)}" aria-label="${label} hodnota"></div></label>`;
+  if (type === 'checkbox') return `<label class="field"><input type="checkbox" ${data}${disabled} ${value?'checked':''}> ${label}</label>`;
+  return `<label class="field"><span>${label}</span>${type==='number'?`<div class="input-wrap"><input type="number" ${data}${disabled} value="${esc(value)}"><span>${esc(options.unit || 'px')}</span></div>`:`<input type="${type}" ${data}${disabled} value="${esc(value)}">`}</label>`;
 }
 const section = (title, content) => `<div class="property-section"><div class="section-title"><strong>${title}</strong><span>⌃</span></div>${content}</div>`;
 function renderProperties() {
@@ -229,7 +242,8 @@ function renderProperties() {
   if (el.type === 'image') content += field('Adresa obrázku','src',p.src) + field('Alternativní text','alt',p.alt) + '<label class="field"><span>Nebo nahrát obrázek do projektu</span><input id="image-upload" type="file" accept="image/*"></label><p class="hint">Nahraný obrázek se vloží přímo do exportovaného HTML.</p>';
   if (el.type === 'input') content += field('Zástupný text','placeholder',p.placeholder) + field('Název pole pro odeslání','fieldName',p.fieldName || 'zprava') + field('Typ pole','inputType',p.inputType || 'text',{type:'select',options:[['text','Text'],['email','E-mail'],['tel','Telefon'],['number','Číslo']]}) + field('Připojit k formuláři','formTarget',p.formTarget || '',{type:'select',options:[['','Bez formuláře'],...project.elements.filter(item=>item.type==='form').map(item=>[item.id,item.name])]}) + field('Povinné pole','required',p.required,{type:'checkbox'});
   if (el.type === 'form') content += field('Popisek prvního pole','formNameLabel',p.formNameLabel || 'Jméno') + field('Popisek e-mailu','formEmailLabel',p.formEmailLabel || 'E-mail') + field('Text tlačítka','formButton',p.formButton || 'Odeslat') + field('Adresa pro odeslání (URL)','formAction',p.formAction) + '<div class="notice">Povinná pole se ověřují v prohlížeči. Pro skutečné doručení zadejte adresu serveru nebo externí služby; bez ní se formulář neodešle. Další pole připojíte v jeho vlastnostech.</div>';
-  let geometry = `<p class="hint">Rozměry a pozice platí pro: <strong>${DEVICE_LABELS[device]}</strong>.</p><div class="property-grid">${field('Pozice X','x',pos.x,{type:'number',scope:'layout'})}${field('Pozice Y','y',pos.y,{type:'number',scope:'layout'})}${field('Šířka','w',pos.w,{type:'number',scope:'layout'})}${field('Výška','h',pos.h,{type:'number',scope:'layout'})}</div><label class="aspect-lock"><input type="checkbox" data-key="aspectLocked" data-scope="props" ${aspectLocked(el)?'checked':''}><span><strong>Zachovat poměr stran</strong><small>Šířka a výška se mění společně</small></span><span class="aspect-lock-icon" aria-hidden="true">${aspectLocked(el)?'🔒':'🔓'}</span></label>`;
+  const locked=positionLocked(el);
+  let geometry = `<p class="hint">Rozměry a pozice platí pro: <strong>${DEVICE_LABELS[device]}</strong>.</p><div class="property-grid">${field('Pozice X','x',pos.x,{type:'number',scope:'layout',disabled:locked})}${field('Pozice Y','y',pos.y,{type:'number',scope:'layout',disabled:locked})}${field('Šířka','w',pos.w,{type:'number',scope:'layout',disabled:locked})}${field('Výška','h',pos.h,{type:'number',scope:'layout',disabled:locked})}</div><label class="aspect-lock"><input type="checkbox" data-key="aspectLocked" data-scope="props" ${aspectLocked(el)?'checked':''}><span><strong>Zachovat poměr stran</strong><small>Šířka a výška se mění společně</small></span><span class="aspect-lock-icon" aria-hidden="true">${aspectLocked(el)?'🔒':'🔓'}</span></label><label class="aspect-lock position-lock-control"><input type="checkbox" data-key="positionLocked" data-scope="props" ${locked?'checked':''}><span><strong>Uzamknout pozici a rozměry</strong><small>Prvek lze vybrat, ale nelze jej posunout ani změnit velikost</small></span><span class="aspect-lock-icon" aria-hidden="true">${locked?'🔒':'🔓'}</span></label><label class="initial-hidden-control"><input type="checkbox" data-key="hiddenInitially" data-scope="props" ${p.hiddenInitially?'checked':''}><span><strong>Skrýt při načtení stránky</strong><small>V náhledu i po exportu ho lze ukázat akcí „Zobrazit / skrýt“</small></span></label>`;
   if (['heading','text','button','link','input','form'].includes(el.type)) geometry += field('Velikost písma','fontSize',pos.fontSize,{type:'number',scope:'layout'});
   let typography = field('Písmo','fontFamily',p.fontFamily,{type:'select',options:[['Arial','Arial'],['Georgia','Georgia'],['Verdana','Verdana'],['Tahoma','Tahoma'],['Trebuchet MS','Trebuchet MS'],['Courier New','Courier New']]}) + field('Řez','fontWeight',p.fontWeight,{type:'select',options:[['400','Běžný'],['700','Tučný']]}) + field('Barva textu','color',p.color,{type:'color'}) + field('Zarovnání','align',p.align,{type:'select',options:[['left','Vlevo'],['center','Na střed'],['right','Vpravo']]});
   let appearance = field('Pozadí (barva nebo transparent)','bg',p.bg,{type:'color'}) + '<div class="property-grid">' + field('Rámeček','borderWidth',p.borderWidth,{type:'number'}) + field('Zaoblení','radius',p.radius,{type:'number'}) + field('Vnitřní mezera','padding',p.padding,{type:'number'}) + field('Vnější mezera','margin',p.margin,{type:'number'}) + field('Stín','shadow',p.shadow,{type:'number'}) + '</div>' + field('Barva rámečku','borderColor',p.borderColor,{type:'color'});
@@ -324,7 +338,17 @@ function exportFiles() {
   files['script.js']=`/* Interakce a animace stránek vygenerovaných v Ateliéru. */\n(${mountActions.toString()})(document);\n(${startAnimations.toString()})(document);\n`;
   return files;
 }
-function updateExport() { generated=exportFiles(); if(!generated[activeFile])activeFile='index.html'; $('#code-tabs').innerHTML=Object.keys(generated).map(name=>`<button data-file="${esc(name)}" class="${name===activeFile?'active':''}">${esc(name)}</button>`).join(''); $('#export-code').textContent=generated[activeFile]; }
+function sourceFiles() { return site.code?.mode==='custom' && site.code.files ? clone(site.code.files) : exportFiles(); }
+function codePreviewDocument() {
+  const files=sourceFiles(), filename=files[pageFilename(project)] ? pageFilename(project) : (files['index.html'] ? 'index.html' : Object.keys(files).find(name=>/\.html?$/i.test(name)));
+  let html=files[filename] || '<!doctype html><title>Chybí index.html</title><p>V Code Studiu přidejte soubor index.html.</p>';
+  const css=String(files['style.css'] || '').replace(/<\/style/gi,'<\\/style');
+  const script=String(files['script.js'] || '').replace(/<\/script/gi,'<\\/script');
+  html=html.replace(/<link\b[^>]*href=["']style\.css["'][^>]*>/gi,'').replace(/<script\b[^>]*src=["']script\.js["'][^>]*>\s*<\/script>/gi,'');
+  const additions=`<style>${css}</style><script>${script}<\/script>`;
+  return /<\/body>/i.test(html) ? html.replace(/<\/body>/i,`${additions}</body>`) : `${html}${additions}`;
+}
+function updateExport() { generated=sourceFiles(); if(!generated[activeFile])activeFile='index.html'; $('#code-tabs').innerHTML=Object.keys(generated).map(name=>`<button data-file="${esc(name)}" class="${name===activeFile?'active':''}">${esc(name)}</button>`).join(''); $('#export-code').textContent=generated[activeFile] || ''; }
 function download(name, content) { const blob=content instanceof Blob ? content : new Blob([content],{type:'text/plain;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); }
 function zipFiles(files) {
   const encoder=new TextEncoder(), chunks=[], central=[]; let offset=0, directorySize=0;
@@ -339,6 +363,64 @@ function zipFiles(files) {
   }
   const end=new Uint8Array(22), e=new DataView(end.buffer); e.setUint32(0,0x06054b50,true);e.setUint16(8,central.length,true);e.setUint16(10,central.length,true);e.setUint32(12,directorySize,true);e.setUint32(16,offset,true);
   return new Blob([...chunks,...central,end],{type:'application/zip'});
+}
+function renderCodeStudio() {
+  if (!codeDraft) codeDraft=sourceFiles();
+  if (!codeDraft[codeFile]) codeFile=codeDraft['index.html'] !== undefined ? 'index.html' : Object.keys(codeDraft)[0];
+  $('#code-editor-tabs').innerHTML=Object.keys(codeDraft).map(name=>`<button type="button" data-code-file="${esc(name)}" class="${name===codeFile?'active':''}"><span>${name.endsWith('.html')?'◇':name.endsWith('.css')?'#':'{}'}</span>${esc(name)}</button>`).join('');
+  $('#code-editor-path').textContent=codeFile || 'soubor';
+  $('#code-editor').value=codeDraft[codeFile] || '';
+  const custom=site.code?.mode==='custom';
+  $('#code-mode-label').textContent=custom ? 'Vlastní kód je zdrojem náhledu i exportu' : 'Kód je vytvořený z návrhu';
+  $('#code-editor-state').textContent=custom ? '● Vlastní kód' : '● Neuložený koncept';
+  $('#reset-code').disabled=!custom;
+}
+function openCodeStudio() { codeDraft=sourceFiles(); codeFile=site.code?.activeFile && codeDraft[site.code.activeFile] !== undefined ? site.code.activeFile : 'index.html'; renderCodeStudio(); $('#code-modal').classList.remove('hidden'); }
+async function copyText(value) {
+  try { await navigator.clipboard.writeText(value); }
+  catch { const area=document.createElement('textarea');area.value=value;document.body.appendChild(area);area.select();document.execCommand('copy');area.remove(); }
+}
+function cssProperties(css, id) {
+  const escaped=id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const match=new RegExp(`#${escaped}\\s*\\{([^}]*)\\}`,'i').exec(css);
+  if (!match) return {};
+  return Object.fromEntries(match[1].split(';').map(part=>part.split(/:(.+)/)).filter(([key,value])=>key&&value).map(([key,value])=>[key.trim(),value.trim()]));
+}
+function importCodeToDesign() {
+  if (!codeDraft) return;
+  const css=codeDraft['style.css'] || '';
+  const htmlFiles=Object.entries(codeDraft).filter(([name])=>/\.html?$/i.test(name));
+  if (!htmlFiles.length) {toast('Pro načtení do návrhu je potřeba HTML soubor.');return;}
+  const pages=[];
+  for (const [filename,source] of htmlFiles) {
+    const doc=new DOMParser().parseFromString(source,'text/html');
+    const candidates=[...doc.querySelectorAll('.canvas-element')];
+    const nodes=candidates.length ? candidates : [...doc.querySelectorAll('main > *, body > *:not(main):not(script):not(style):not(link)')].filter(node=>!node.matches('script,style,link'));
+    const pageId=doc.body.dataset.page || uid();
+    const page={id:pageId,title:doc.title || (filename==='index.html'?'Domovská stránka':filename.replace(/\.html?$/i,'')),filename:filename==='index.html'?'index.html':filename,pageHeights:{desktop:1000,tablet:1100,mobile:1330},elements:[]};
+    const pageHeight=new RegExp(`body\\[data-page=["']${pageId.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}["']\\] \\.page\\{height:(\\d+)px\\}`).exec(css);
+    if (pageHeight) page.pageHeights.desktop=Number(pageHeight[1]);
+    nodes.forEach((node,index)=>{
+      const tag=node.tagName.toLowerCase();
+      const type=tag==='h1'||tag==='h2'||tag==='h3'?'heading':tag==='button'?'button':tag==='img'?'image':tag==='a'?'link':tag==='input'||tag==='textarea'||tag==='select'?'input':tag==='form'?'form':tag==='section'?'section':'text';
+      const el=makeElement(type);el.id=node.id || uid();el.name=node.getAttribute('data-name') || typeNames[type];el.text=type==='image'||type==='input'||type==='form'?'':node.textContent.trim();
+      const p=el.props, style=cssProperties(css,el.id), percent=value=>Math.round(Number.parseFloat(value)*12), pixels=value=>Math.round(Number.parseFloat(value));
+      if (type==='image') {p.src=node.getAttribute('src') || '';p.alt=node.getAttribute('alt') || 'Obrázek';}
+      if (type==='input') {p.placeholder=node.getAttribute('placeholder') || '';p.required=node.hasAttribute('required');p.inputType=node.getAttribute('type') || 'text';p.fieldName=node.getAttribute('name') || 'zprava';}
+      if (style.left?.endsWith('%')) el.layouts.desktop.x=percent(style.left);
+      if (style.top?.endsWith('px')) el.layouts.desktop.y=pixels(style.top);
+      if (style.width?.endsWith('%')) el.layouts.desktop.w=percent(style.width);
+      if (style.height?.endsWith('px')) el.layouts.desktop.h=pixels(style.height);
+      if (style['font-size']?.endsWith('px')) el.layouts.desktop.fontSize=pixels(style['font-size']);
+      if (style.color) p.color=style.color;if (style.background) p.bg=style.background;if (style['font-family']) p.fontFamily=style['font-family'].replace(/["']/g,'');if (style['font-weight']) p.fontWeight=style['font-weight'];if (style['text-align']) p.align=style['text-align'];if (style['border-radius']?.endsWith('px')) p.radius=pixels(style['border-radius']);if (style.padding?.endsWith('px')) p.padding=pixels(style.padding);
+      p.hiddenInitially=node.hasAttribute('hidden');
+      page.elements.push(el);
+    });
+    pages.push(page);
+  }
+  if (!pages.some(page=>page.elements.length)) {toast('V HTML jsem nenašel žádné prvky, které lze vložit na plátno.');return;}
+  if (!confirm('Načíst HTML do vizuálního návrhu? Převezmou se běžné prvky a základní styly; vlastní JavaScript zůstane pouze v záloze historie.')) return;
+  remember('code');site.pages=pages;site.activePageId=pages[0].id;delete site.code;project=pages[0];selected=null;codeDraft=sourceFiles();codeFile='index.html';renderAll();renderCodeStudio();toast('Kód byl načten do vizuálního návrhu.');
 }
 
 function accountDisplay() {
@@ -424,8 +506,8 @@ $('#pages-list').addEventListener('click',event=>{
   remember();site.pages=site.pages.filter(item=>item.id!==page.id);site.pages.forEach(item=>item.elements.forEach(el=>actionsFor(el).forEach(action=>{if(action.type==='page'&&action.target===page.id)action.target='';})));switchPage(site.pages[0].id);toast('Stránka byla smazána.');
 });
 $('#pages-list').addEventListener('change',event=>{const id=event.target.dataset.pageTitle;if(!id)return;const page=site.pages.find(item=>item.id===id);if(!page)return;const title=event.target.value.trim()||'Stránka';if(title!==page.title){remember();page.title=title;}renderAll();});
-function applyTheme(dark) {document.body.classList.toggle('dark',dark);$('#theme-btn').setAttribute('aria-pressed',String(dark));$('#theme-btn').title=dark?'Přepnout světlý režim':'Přepnout tmavý režim';$('#theme-btn').setAttribute('aria-label',$('#theme-btn').title);$('#theme-btn').innerHTML=dark?'<span>☼</span> <b>Světlý režim</b>':'<span>☾</span> <b>Tmavý režim</b>';}
-try { applyTheme(localStorage.getItem('atelier-theme')==='dark'); } catch { applyTheme(false); }
+function applyTheme(dark) {document.body.classList.add('ide-theme');document.body.classList.toggle('dark',dark);$('#theme-btn').setAttribute('aria-pressed',String(dark));$('#theme-btn').title=dark?'Přepnout světlý režim':'Přepnout tmavý režim';$('#theme-btn').setAttribute('aria-label',$('#theme-btn').title);$('#theme-btn').innerHTML=dark?'<span>☼</span> <b>Světlý režim</b>':'<span>☾</span> <b>Tmavý režim</b>';}
+try { applyTheme(localStorage.getItem('atelier-theme') !== 'light'); } catch { applyTheme(true); }
 $('#theme-btn').addEventListener('click',()=>{const dark=!document.body.classList.contains('dark');applyTheme(dark);try{localStorage.setItem('atelier-theme',dark?'dark':'light');}catch{toast('Nastavení vzhledu nelze v tomto prohlížeči uložit.');}});
 $$('[data-add]').forEach(button=>{ button.addEventListener('click',()=>addElement(button.dataset.add)); button.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',button.dataset.add)); });
 $('#page').addEventListener('dragover',event=>{ if (!preview) event.preventDefault(); });
@@ -441,13 +523,26 @@ $('#cloud-load').addEventListener('click',()=>{ $('#account-panel').classList.ad
 $('#cloud-use-local').addEventListener('click',()=>{cloud.pending=null;$('#cloud-conflict').classList.add('hidden');dirty=true;$('#save-status').textContent='Místní verze · připravena k uložení na účet';toast('Používáte místní verzi. Na účet ji uložíte tlačítkem Uložit projekt.');});
 $('#cloud-use-online').addEventListener('click',()=>{if(cloud.pending && loadOnlineProject(cloud.pending,true)){cloud.pending=null;$('#cloud-conflict').classList.add('hidden');toast('Projekt byl načten z účtu. Místní verze zůstala jako záloha v prohlížeči.');}});
 $('#preview-btn').addEventListener('click',()=>{preview=!preview;document.body.classList.toggle('previewing',preview);$('#preview-btn').innerHTML=preview?'<span>✎</span> Zpět do editoru':'<span>▷</span> Náhled';$('.workspace-note span:last-child').textContent=preview?'Režim náhledu':'Režim úprav';renderAll();});
+$('#code-btn').addEventListener('click',openCodeStudio);
 $('#export-btn').addEventListener('click',()=>{activeFile='index.html';updateExport();$('#export-modal').classList.remove('hidden');});
 $$('[data-close]').forEach(b=>b.addEventListener('click',()=>$('#'+b.dataset.close).classList.add('hidden')));
 $('#export-modal').addEventListener('click',e=>{if(e.target.id==='export-modal') e.currentTarget.classList.add('hidden');});
 $('#code-tabs').addEventListener('click',event=>{const b=event.target.closest('[data-file]');if(b){activeFile=b.dataset.file;updateExport();}});
 $('#download-code').addEventListener('click',()=>download(activeFile,generated[activeFile]));
 $('#download-zip').addEventListener('click',()=>{download('muj-web.zip',zipFiles(generated));toast('ZIP obsahuje všechny stránky, styly a skript.');});
-$('#copy-code').addEventListener('click',async()=>{try{await navigator.clipboard.writeText(generated[activeFile]);toast('Obsah souboru zkopírován.');}catch{const area=document.createElement('textarea');area.value=generated[activeFile];document.body.appendChild(area);area.select();document.execCommand('copy');area.remove();toast('Obsah souboru zkopírován.');}});
+$('#copy-code').addEventListener('click',async()=>{await copyText(generated[activeFile]);toast('Obsah souboru zkopírován.');});
+$('#code-editor-tabs').addEventListener('click',event=>{const button=event.target.closest('[data-code-file]');if(!button)return;codeFile=button.dataset.codeFile;renderCodeStudio();});
+$('#code-editor').addEventListener('input',event=>{if(codeDraft&&codeFile)codeDraft[codeFile]=event.target.value;});
+$('#copy-code-editor').addEventListener('click',async()=>{await copyText($('#code-editor').value);toast('Obsah souboru zkopírován.');});
+$('#import-code').addEventListener('click',importCodeToDesign);
+$('#apply-code').addEventListener('click',()=>{
+  if(!codeDraft || !Object.keys(codeDraft).some(name=>/\.html?$/i.test(name))){toast('Pro náhled je potřeba alespoň jeden HTML soubor.');return;}
+  remember('code');site.code={mode:'custom',files:clone(codeDraft),activeFile:codeFile};updateExport();renderCodeStudio();if(preview)renderCanvas();toast('Vlastní kód je nyní použitý pro náhled i export.');
+});
+$('#reset-code').addEventListener('click',()=>{
+  if(site.code?.mode!=='custom' || !confirm('Obnovit generovaný kód z aktuálního návrhu? Vlastní úpravy kódu se nahradí.'))return;
+  remember('code');delete site.code;codeDraft=sourceFiles();codeFile='index.html';updateExport();renderCodeStudio();if(preview)renderCanvas();toast('Kód byl znovu vytvořen z návrhu.');
+});
 function applyProperty(input) {
   const el=current(), {key,scope}=input.dataset;
   if(!key || (!el && scope!=='page')) return;
@@ -534,6 +629,7 @@ $('#page').addEventListener('pointerdown',event=>{
   if(node.isContentEditable) return;
   event.preventDefault(); const el=project.elements.find(item=>item.id===node.id);if(!el)return;
   selected=el.id; const rect=node.getBoundingClientRect();
+  if(positionLocked(el)) { drag=null;$$('.canvas-element', $('#page')).forEach(item=>item.classList.toggle('selected',item.id===selected));renderLayers();renderProperties();toast('Pozice a rozměry tohoto prvku jsou uzamčené.');return; }
   const resize=event.clientX>rect.right-14 && event.clientY>rect.bottom-14;
   drag={id:el.id,startX:event.clientX,startY:event.clientY,layout:clone(el.layouts[device]),resize,changed:false};
   $$('.canvas-element', $('#page')).forEach(item=>item.classList.toggle('selected',item.id===selected));renderLayers();renderProperties();
@@ -561,13 +657,13 @@ $('#page').addEventListener('dblclick',event=>{
   node.addEventListener('blur',()=>{el.text=node.innerText.replace(/\n+$/,'');node.contentEditable='false';renderAll();},{once:true});
 });
 document.addEventListener('keydown',event=>{
-  if(event.key==='Escape'){$('#export-modal').classList.add('hidden');$('.right-panel').classList.remove('mobile-open');return;}
+  if(event.key==='Escape'){$('#export-modal').classList.add('hidden');$('#code-modal').classList.add('hidden');$('.right-panel').classList.remove('mobile-open');return;}
   const typing=/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)||document.activeElement.isContentEditable;
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'&&!typing){event.preventDefault();changeHistory(event.shiftKey?'redo':'undo');return;}
   if(typing||preview||!current())return;
   if(event.key==='Delete'||event.key==='Backspace'){event.preventDefault();operate('delete');}
   if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='d'){event.preventDefault();operate('duplicate');}
-  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();remember();const l=current().layouts[device],step=event.shiftKey?10:1;l.x+=(event.key==='ArrowRight'?step:event.key==='ArrowLeft'?-step:0);l.y+=(event.key==='ArrowDown'?step:event.key==='ArrowUp'?-step:0);renderAll();}
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)){event.preventDefault();if(positionLocked(current())){toast('Pozice a rozměry tohoto prvku jsou uzamčené.');return;}remember();const l=current().layouts[device],step=event.shiftKey?10:1;l.x+=(event.key==='ArrowRight'?step:event.key==='ArrowLeft'?-step:0);l.y+=(event.key==='ArrowDown'?step:event.key==='ArrowUp'?-step:0);renderAll();}
 });
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
 renderAll();
